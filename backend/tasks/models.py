@@ -50,8 +50,6 @@ class CodingChallenge(models.Model):
     is_private = models.BooleanField(default=False, help_text="If true, only assigned users and groups can access this challenge.")
     assigned_users = models.ManyToManyField(User, blank=True, related_name='coding_challenges')
     allowed_groups = models.ManyToManyField(Group, blank=True, related_name='group_challenges')
-    start_time = models.DateTimeField(blank=True, null=True)
-    end_time = models.DateTimeField(blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_challenges')
     created_at = models.DateTimeField(default=timezone.now)
 
@@ -61,6 +59,20 @@ class CodingChallenge(models.Model):
     def __str__(self):
         langs = ', '.join(self.languages or [])
         return f"{self.title} ({langs}) - {self.difficulty}"
+
+    def apply_group_rules(self, group: 'ChallengeGroup'):
+        """Apply privacy and audience rules from a ChallengeGroup to this challenge."""
+        if not group:
+            return self
+        # Grouped challenges must be private
+        self.is_private = True
+        self.save(update_fields=['is_private'])
+        # Merge audience
+        if group.assigned_users.exists():
+            self.assigned_users.add(*group.assigned_users.all())
+        if group.allowed_groups.exists():
+            self.allowed_groups.add(*group.allowed_groups.all())
+        return self
 
 
 class ChallengeGroup(models.Model):
@@ -90,18 +102,7 @@ class ChallengeGroup(models.Model):
         """
         targets = [challenge] if challenge is not None else list(self.challenges.all())
         for ch in targets:
-            ch.is_private = self.is_private
-            # Inherit temporal window if provided on group
-            if self.start_time:
-                ch.start_time = self.start_time
-            if self.end_time:
-                ch.end_time = self.end_time
-            ch.save(update_fields=['is_private', 'start_time', 'end_time'])
-            # Merge assigned users and groups
-            if self.assigned_users.exists():
-                ch.assigned_users.add(*self.assigned_users.all())
-            if self.allowed_groups.exists():
-                ch.allowed_groups.add(*self.allowed_groups.all())
+            ch.apply_group_rules(self)
 
 
 class CodeSubmission(models.Model):

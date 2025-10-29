@@ -13,14 +13,32 @@ interface Question {
   type: 'test' | 'code' | 'text';
   targetType: 'all' | 'group';
   targetGroup?: string;
-  startDate: string;
-  endDate: string;
-  duration: number;
-  isActive: boolean;
+  start_time?: string;
+  end_time?: string;
+  time_limit?: number;
+  is_private: boolean;
+  description?: string;
   content?: string;
   options?: string[];
   correctAnswer?: number;
-  testCases?: TestCase[];
+  test_cases?: TestCase[];
+  languages?: string[];
+  difficulty?: 'easy' | 'medium' | 'hard';
+  max_score?: number;
+  memory_limit?: number;
+  autocheck?: boolean;
+  challenge_group?: {
+    id: number;
+    title: string;
+    description?: string;
+  };
+  assigned_users?: number[];
+  allowed_groups?: number[];
+  created_by?: {
+    id: number;
+    username: string;
+  };
+  created_at?: string;
 }
 
 function QuestionManager() {

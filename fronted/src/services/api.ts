@@ -1,7 +1,10 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// Response interfaces
 interface LoginResponse {
   detail?: string;
+  token?: string;
+  refresh_token?: string;
   user?: {
     username: string;
     email: string;
@@ -72,6 +75,12 @@ class ApiService {
     // JSON content-type default when body is string
     if (typeof options.body === 'string' && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json';
+    }
+
+    // Add JWT token if available
+    const token = localStorage.getItem('token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     // Attach CSRF for unsafe methods
@@ -168,6 +177,14 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(data),
     });
+    
+    if (response.token) {
+      localStorage.setItem('token', response.token);
+      if (response.refresh_token) {
+        localStorage.setItem('refresh_token', response.refresh_token);
+      }
+    }
+    
     return response;
   }
 
@@ -204,6 +221,8 @@ class ApiService {
     role?: 'student' | 'teacher';
     group?: number | null;
     avatarFile?: File | null;
+    bio?: string;
+    rank?: number;
   }): Promise<UserProfile> {
     const form = new FormData();
     if (payload.email) form.append('email', payload.email);
@@ -213,6 +232,8 @@ class ApiService {
     const profile: any = {};
     if (payload.role) profile.role = payload.role;
     if (payload.group !== undefined) profile.group = payload.group;
+    if (payload.bio !== undefined) profile.bio = payload.bio;
+    if (payload.rank !== undefined) profile.rank = payload.rank;
     form.append('profile', JSON.stringify(profile));
     if (payload.avatarFile) form.append('avatar', payload.avatarFile);
 
@@ -492,7 +513,21 @@ class ApiService {
       memoryUsed?: number;
       error?: string;
     }>;
-  }): Promise<any> {
+  }): Promise<{
+    id: number;
+    score: number;
+    status: 'pending' | 'checking' | 'accepted' | 'rejected';
+    feedback?: string;
+    submitted_at: string;
+    execution_time?: number;
+    memory_used?: number;
+    test_results?: Array<{
+      passed: boolean;
+      error?: string;
+      execution_time?: number;
+      memory_used?: number;
+    }>;
+  }> {
     // Route submission based on type to backend endpoints and map required fields
     if (data.type === 'code') {
       // Code submissions expect 'challenge' FK and 'code' JSON + test_results

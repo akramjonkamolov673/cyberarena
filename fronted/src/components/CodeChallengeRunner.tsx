@@ -8,10 +8,17 @@ interface QuestionItem {
   title: string;
   description?: string;
   languages?: string[];
-  testCases?: Array<{ input: string; expectedOutput: string }>;
+  test_cases?: Array<{ input: string; expected_output: string }>;
   time_limit?: number;
   memory_limit?: number;
   max_score?: number;
+  autocheck?: boolean;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  is_private?: boolean;
+  challenge_group?: {
+    id: number;
+    title: string;
+  };
 }
 
 interface Props {
@@ -29,13 +36,22 @@ export default function CodeChallengeRunner({ question, onClose }: Props) {
     setMessage(null);
     try {
       const payload = {
-        questionId: question.id,
-        answer: submission.answer,
-        submittedAt: submission.submittedAt || new Date().toISOString(),
-        timeSpent: null,
-        type: 'code' as const,
-        language: submission.language || (question.languages && question.languages[0]) || 'cpp',
-        testResults: submission.metadata?.testResults || submission.executionSummary || [],
+        challenge: question.id,
+        code: {
+          source: submission.answer,
+          language: submission.language || (question.languages && question.languages[0]) || 'cpp'
+        },
+        submitted_at: submission.submittedAt || new Date().toISOString(),
+        time_spent: null,
+        test_results: (submission.metadata?.testResults || submission.executionSummary || []).map((result: any) => ({
+          input: result.input,
+          expected_output: result.expectedOutput,
+          actual_output: result.actualOutput,
+          passed: result.passed,
+          execution_time: result.executionTime,
+          memory_used: result.memoryUsed,
+          error: result.error
+        }))
       };
 
       await apiService.submitAnswer(payload as any);

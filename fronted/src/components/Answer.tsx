@@ -7,13 +7,24 @@ interface AnswerProps {
     id: string;
     title: string;
     description?: string;
-    // accept wider set from backend (may be string or undefined)
     type?: string | undefined;
     content?: string;
     options?: string[];
     time_limit?: number;
+    memory_limit?: number;
+    max_score?: number;
     start_time?: string;
     end_time?: string;
+    languages?: string[];
+    test_cases?: Array<{ 
+      input: string; 
+      expected_output: string;
+      execution_time?: number;
+      memory_used?: number;
+    }>;
+    autocheck?: boolean;
+    difficulty?: 'easy' | 'medium' | 'hard';
+    is_private?: boolean;
   };
   onSubmit: (answer: any) => void;
   onClose: () => void;
@@ -58,22 +69,33 @@ const Answer: React.FC<AnswerProps> = ({ question, onSubmit, onClose }) => {
     if (!answer) return;
     
     const submissionData = {
-      questionId: question.id,
-      answer,
-      submittedAt: new Date().toISOString(),
-      timeSpent: question.time_limit ? question.time_limit - (remainingTime || 0) : null,
-      type: question.type,
-      // Test uchun qo'shimcha ma'lumotlar
+      challenge: question.id,
+      submitted_at: new Date().toISOString(),
+      time_spent: question.time_limit ? question.time_limit - (remainingTime || 0) : null,
+      
+      // Test submission
       ...(question.type === 'test' && {
-        selectedOption: answer as number,
-        options: question.options
+        test: question.id,
+        answers: [{
+          question_index: 0,
+          selected: answer as number
+        }]
       }),
-      // Kod uchun qo'shimcha ma'lumotlar
+      
+      // Code submission
       ...(question.type === 'code' && {
-        language: 'python', // TODO: Tanlangan tilni olish kerak
-        executionTime: 0, // TODO: Haqiqiy qiymatni olish kerak
-        memoryUsed: 0, // TODO: Haqiqiy qiymatni olish kerak
-        testResults: [] // TODO: Test natijalarini olish kerak
+        code: {
+          source: answer as string,
+          language: question.languages ? question.languages[0] : 'cpp'
+        },
+        test_results: [],
+        execution_time: 0,
+        memory_used: 0
+      }),
+      
+      // Text submission
+      ...(question.type === 'text' && {
+        answer: answer as string
       })
     };
 
@@ -97,10 +119,38 @@ const Answer: React.FC<AnswerProps> = ({ question, onSubmit, onClose }) => {
             <i className="fas fa-clock"></i>
             <span>Vaqt limiti: {question.time_limit ? `${Math.ceil(question.time_limit / 60)} daqiqa` : 'Cheklanmagan'}</span>
           </div>
+          {question.memory_limit && (
+            <div className="info-item">
+              <i className="fas fa-memory"></i>
+              <span>Xotira limiti: {question.memory_limit}MB</span>
+            </div>
+          )}
+          {question.max_score && (
+            <div className="info-item">
+              <i className="fas fa-trophy"></i>
+              <span>Maksimal ball: {question.max_score}</span>
+            </div>
+          )}
           <div className="info-item">
             <i className="fas fa-file-alt"></i>
             <span>Savol turi: {question.type === 'test' ? 'Test' : question.type === 'code' ? 'Kod' : 'Matn'}</span>
           </div>
+          {question.difficulty && (
+            <div className="info-item">
+              <i className="fas fa-signal"></i>
+              <span>Qiyinlik: {
+                question.difficulty === 'easy' ? 'Oson' :
+                question.difficulty === 'medium' ? "O'rta" :
+                question.difficulty === 'hard' ? 'Qiyin' : question.difficulty
+              }</span>
+            </div>
+          )}
+          {question.languages && question.languages.length > 0 && (
+            <div className="info-item">
+              <i className="fas fa-code"></i>
+              <span>Tillar: {question.languages.join(', ')}</span>
+            </div>
+          )}
         </div>
         <div className="button-group">
           <button className="start-btn" onClick={handleStart}>
@@ -172,14 +222,7 @@ const Answer: React.FC<AnswerProps> = ({ question, onSubmit, onClose }) => {
               initialCode={(answer as string) || question.content || ''}
               language={question.languages && question.languages.length > 0 ? question.languages[0] : 'cpp'}
               fileName={question.languages && question.languages.length > 0 && question.languages[0].toLowerCase().includes('cpp') ? 'main.cpp' : 'main.cpp'}
-              testCases={
-                // support both camelCase and snake_case test cases
-                (question as any).test_cases
-                  ? (question as any).test_cases.map((tc: any) => ({ input: tc.input, expectedOutput: tc.expected_output }))
-                  : (question as any).testCases
-                    ? (question as any).testCases.map((tc: any) => ({ input: tc.input, expectedOutput: tc.expectedOutput }))
-                    : []
-              }
+              testCases={question.test_cases || []}
               onSubmit={(submission) => {
                 // merge code submission into parent expected submission shape
                 const payload = {

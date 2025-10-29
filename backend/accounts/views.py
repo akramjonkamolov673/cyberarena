@@ -394,5 +394,10 @@ class GithubAuthView(views.APIView):
 class GroupListView(generics.ListAPIView):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
-    permission_classes = [permissions.AllowAny]
-    authentication_classes = []
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class GroupDetailView(generics.RetrieveAPIView):
+    queryset = Group.objects.all()
+    serializer_class = GroupSerializer
+    permission_classes = [permissions.IsAuthenticated]

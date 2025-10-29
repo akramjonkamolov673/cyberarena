@@ -30,24 +30,33 @@ interface QuestionItem {
   content?: string;
   options?: string[];
   correctAnswer?: number;
-  // backend uses snake_case for times
-  // keep these as optional strings (avoid `null`) so they're compatible with other components
   start_time?: string;
   end_time?: string;
-  // older frontend used camelCase — accept both (optional strings)
   startDate?: string;
   endDate?: string;
-  // duration in minutes (legacy) or time_limit in seconds (challenge)
   duration?: number;
   time_limit?: number;
   max_score?: number;
   memory_limit?: number;
   is_private?: boolean;
   assigned_users?: number[];
-  allowed_groups?: any[];
+  allowed_groups?: number[];
   autocheck?: boolean;
-  created_by?: any;
+  created_by?: {
+    id: number;
+    username: string;
+    first_name?: string;
+    last_name?: string;
+  };
   created_at?: string;
+  challenge_group?: {
+    id: number;
+    title: string;
+    description?: string;
+    start_time?: string;
+    end_time?: string;
+    is_private: boolean;
+  };
 }
 
 function StudentPanel({ onLogout }: StudentPanelProps) {
@@ -67,8 +76,22 @@ function StudentPanel({ onLogout }: StudentPanelProps) {
 
   const handleSubmitAnswer = async (answerData: any) => {
     try {
-      await apiService.submitAnswer(answerData);
-      alert('Javob muvaffaqiyatli yuborildi!');
+      const result = await apiService.submitAnswer(answerData);
+      
+      if (result.status === 'accepted') {
+        alert(`Javob qabul qilindi! Ball: ${result.score}`);
+      } else if (result.status === 'checking') {
+        alert('Javobingiz tekshirilmoqda...');
+      } else if (result.status === 'rejected') {
+        alert(`Javob rad etildi. Sabab: ${result.feedback || "Noma'lum xato"}`);
+      }
+      
+      if (result.test_results) {
+        const passed = result.test_results.filter(t => t.passed).length;
+        const total = result.test_results.length;
+        alert(`Test natijalari: ${passed}/${total} ta test o'tdi`);
+      }
+      
       setSelectedChallenge(null);
     } catch (error) {
       console.error('Javobni yuborishda xatolik:', error);

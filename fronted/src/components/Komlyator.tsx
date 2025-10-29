@@ -3,7 +3,10 @@ import './Komlyator.css';
 
 interface TestCase {
   input: string;
-  expectedOutput: string;
+  expected_output: string;
+  execution_time?: number;
+  memory_used?: number;
+  error?: string;
 }
 
 interface KomlyatorProps {
@@ -38,6 +41,10 @@ export default function Komlyator({
         version: 'latest',
         files: [{ name: fileName, content: code }],
         stdin,
+        run_timeout: 10000, // 10 seconds
+        compile_timeout: 10000,
+        compile_memory_limit: 512000, // 512MB
+        run_memory_limit: 512000
       };
 
       const resp = await fetch(PISTON_URL, {
@@ -90,14 +97,20 @@ export default function Komlyator({
     if (results.length === 0) await handleRunAll();
 
     const submission = {
-      answer: code,
-      submittedAt: new Date().toISOString(),
-      type: 'code',
-      language,
-      executionSummary: results,
-      metadata: {
-        testResults: results.map(r => ({ input: testCases[r.index]?.input || '', expected: r.expected, actual: r.stdout, passed: r.passed, stderr: r.stderr }))
-      }
+      code: {
+        source: code,
+        language: language
+      },
+      submitted_at: new Date().toISOString(),
+      test_results: results.map(r => ({
+        input: testCases[r.index]?.input || '',
+        expected_output: testCases[r.index]?.expected_output || '',
+        actual_output: r.stdout,
+        passed: r.passed,
+        execution_time: r.run_time,
+        memory_used: r.memory,
+        error: r.stderr || null
+      }))
     };
 
     if (onSubmit) onSubmit(submission);
