@@ -228,6 +228,8 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
 function AnswersSection() {
   const [answers, setAnswers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [evaluating, setEvaluating] = useState<number | null>(null);
+  const [score, setScore] = useState<number>(0);
 
   useEffect(() => {
     loadAnswers();
@@ -236,12 +238,41 @@ function AnswersSection() {
   const loadAnswers = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getStudentAnswers();
+      const response = await apiService.getSubmissions();
       setAnswers(response);
     } catch (error) {
       console.error('Javoblarni yuklashda xatolik:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEvaluate = async (answerId: string) => {
+    if (!score) return;
+    
+    try {
+      const evaluationData = {
+        score,
+        status: score === 100 ? 'accepted' : score > 0 ? 'partially_accepted' : 'rejected',
+        feedback: '', // TODO: Feedback qo'shish imkoniyatini yaratish
+        // Test javoblari uchun
+        checkedTestCases: [] // TODO: Test natijalarini tekshirish imkoniyatini yaratish
+      };
+
+      await apiService.evaluateSubmission(answerId, evaluationData);
+      setEvaluating(null);
+      setScore(0);
+      loadAnswers(); // Yangilangan ro'yxatni yuklash
+
+      // Muvaffaqiyatli xabar
+      const toast = document.createElement('div');
+      toast.className = 'toast success';
+      toast.textContent = 'Javob muvaffaqiyatli baholandi';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    } catch (error) {
+      console.error('Baholashda xatolik:', error);
+      alert('Baholashda xatolik yuz berdi');
     }
   };
 
@@ -287,20 +318,97 @@ function AnswersSection() {
               <div className="answer-header">
                 <h3>{answer.studentName}</h3>
                 <span className="question-title">{answer.questionTitle}</span>
+                <span className="answer-type">
+                  <i className={`fas ${
+                    answer.type === 'test' ? 'fa-check-circle' : 
+                    answer.type === 'code' ? 'fa-code' : 'fa-file-alt'
+                  }`}></i>
+                  {answer.type === 'test' ? 'Test' : 
+                   answer.type === 'code' ? 'Kod' : 'Matn'}
+                </span>
               </div>
               <div className="answer-content">
-                <p>{answer.answer}</p>
+                {answer.type === 'test' ? (
+                  <div className="test-answer">
+                    <p>Tanlangan javob: {answer.selectedOption + 1}-variant</p>
+                    {answer.options && (
+                      <div className="options-list">
+                        {answer.options.map((option: string, index: number) => (
+                          <div 
+                            key={index} 
+                            className={`option ${index === answer.selectedOption ? 'selected' : ''} ${index === answer.correctOption ? 'correct' : ''}`}
+                          >
+                            <span className="option-number">{index + 1}</span>
+                            <span className="option-text">{option}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={answer.type === 'code' ? 'code-answer' : 'text-answer'}>
+                    <pre><code>{answer.answer}</code></pre>
+                  </div>
+                )}
               </div>
               <div className="answer-footer">
-                <span className="date">
-                  <i className="fas fa-clock"></i>
-                  {new Date(answer.submittedAt).toLocaleString('uz-UZ')}
-                </span>
+                <div className="answer-info">
+                  <span className="date">
+                    <i className="fas fa-clock"></i>
+                    {new Date(answer.submittedAt).toLocaleString('uz-UZ')}
+                  </span>
+                  {answer.timeSpent && (
+                    <span className="time-spent">
+                      <i className="fas fa-hourglass-end"></i>
+                      {Math.floor(answer.timeSpent / 60)}:{(answer.timeSpent % 60).toString().padStart(2, '0')}
+                    </span>
+                  )}
+                </div>
                 <div className="answer-actions">
-                  <button className="evaluate-btn">
-                    <i className="fas fa-check"></i>
-                    Baholash
-                  </button>
+                  {evaluating === answer.id ? (
+                    <div className="evaluation-form">
+                      <input
+                        type="number"
+                        min="0"
+                        max={answer.maxScore || 100}
+                        value={score}
+                        onChange={(e) => setScore(Number(e.target.value))}
+                        placeholder="Ball"
+                      />
+                      <button 
+                        className="save-score-btn"
+                        onClick={() => handleEvaluate(answer.id)}
+                        disabled={!score}
+                      >
+                        <i className="fas fa-save"></i>
+                        Saqlash
+                      </button>
+                      <button 
+                        className="cancel-btn"
+                        onClick={() => {
+                          setEvaluating(null);
+                          setScore(0);
+                        }}
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    </div>
+                  ) : (
+                    answer.score ? (
+                      <span className="score-badge">
+                        <i className="fas fa-star"></i>
+                        {answer.score} ball
+                      </span>
+                    ) : (
+                      <button 
+                        className="evaluate-btn"
+                        onClick={() => setEvaluating(answer.id)}
+                      >
+                        <i className="fas fa-check"></i>
+                        Baholash
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             </div>

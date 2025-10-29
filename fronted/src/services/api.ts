@@ -99,8 +99,21 @@ class ApiService {
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || errorData.error || 'Xatolik yuz berdi');
+      // Try to parse JSON error body, fallback to text
+      const text = await response.text().catch(() => '');
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const errorData = text ? JSON.parse(text) : {};
+        // Prefer common DRF keys
+        errorMessage = errorData.detail || errorData.error || JSON.stringify(errorData) || errorMessage;
+      } catch {
+        if (text) errorMessage = text;
+      }
+      const err = new Error(errorMessage || 'Xatolik yuz berdi');
+      // attach extra info for callers to debug
+      (err as any).status = response.status;
+      (err as any).body = text;
+      throw err;
     }
 
     // no content
@@ -238,9 +251,339 @@ class ApiService {
     return this.request<Group[]>('/api/users/groups/');
   }
 
-  // Savollar ro'yxati (frontend `QuestionManager` tomonidan yaratilgan savollarni oladi)
+  // Savollar ro'yxati
   async getQuestions(): Promise<any[]> {
-    return this.request<any[]>('/api/challenges/');
+    // Fetch both coding challenges and test sets and merge into a single list
+    try {
+      const [challenges, tests] = await Promise.all([
+        this.request<any[]>('/api/challenges/').catch(() => []),
+        this.request<any[]>('/api/tests/').catch(() => []),
+      ]);
+
+      // Normalize coding challenges
+      const normalizedChallenges = (challenges || []).map(c => ({
+        id: c.id,
+        title: c.title,
+        type: 'code',
+        content: c.description,
+        languages: c.languages,
+        testCases: c.test_cases || c.testCases || [],
+        startDate: c.start_time,
+        endDate: c.end_time,
+        duration: c.time_limit ? Math.round(Number(c.time_limit) / 60) : null,
+        isActive: c.is_active ?? false,
+        raw: c,
+      }));
+
+      // Normalize tests
+      const normalizedTests = (tests || []).map(t => ({
+        id: t.id,
+        title: t.title,
+        type: 'test',
+        content: t.description || '',
+        options: (t.tests && t.tests.length > 0 && t.tests[0].options) ? t.tests[0].options : [],
+        correctAnswer: (t.tests && t.tests.length > 0 && typeof t.tests[0].correct !== 'undefined') ? t.tests[0].correct : 0,
+        startDate: t.start_time,
+        endDate: t.end_time,
+        duration: null,
+        isActive: t.is_private === false ? true : false,
+        raw: t,
+      }));
+
+      return [...normalizedChallenges, ...normalizedTests];
+    } catch (err) {
+      console.error('Error fetching questions:', err);
+      return [];
+    }
+  }
+
+  // Yangi savol yaratish yoki mavjud savollarga qo'shish
+  async createQuestion(data: {
+    title: string;
+    type: 'test' | 'text' | 'code';
+    targetType: 'all' | 'group';
+    targetGroup?: string;
+    startDate: string;
+    endDate: string;
+    duration: number;
+    content?: string;
+    options?: string[];
+    correctAnswer?: number;
+    testCases?: Array<{ input: string; expectedOutput: string }>;
+  }): Promise<any> {
+    // Build backend-compatible payloads depending on question type
+    try {
+      if (data.type === 'test') {
+        // Map to TestSet model: tests is an array of question objects
+        const tests = (data.options || []).map((opt, idx) => ({
+          prompt: data.content || '',
+          options: data.options || [],
+          correct: data.correctAnswer ?? 0,
+        }));
+
+        const payload = {
+          title: data.title,
+          description: data.content || '',
+          tests,
+          // dates expected as start_time / end_time
+          start_time: data.startDate || null,
+          end_time: data.endDate || null,
+          is_private: data.targetType !== 'all',
+        } as any;
+
+        return this.request('/api/tests/', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      }
+
+      // For code or text challenges use CodingChallenge model
+      const languages = data.type === 'code' ? ['cpp'] : [];
+      const test_cases = (data.testCases || []).map(tc => ({ input: tc.input, expected_output: tc.expectedOutput }));
+
+      const timeLimitSeconds = Math.max(1, (data.duration || 0) * 60);
+      const payload = {
+        title: data.title,
+        description: data.content || '',
+        languages,
+        test_cases,
+        // convert duration (minutes) -> time_limit (seconds) for per-test time limit
+        time_limit: timeLimitSeconds,
+        difficulty: 'medium',
+        max_score: 100,
+        autocheck: data.type === 'code',
+        memory_limit: 256,
+        is_private: data.targetType !== 'all',
+        start_time: data.startDate || null,
+        end_time: data.endDate || null,
+      } as any;
+
+      // Attach parent/order info if we have an existing set (best-effort)
+      try {
+        const existingQuestions = await this.getQuestions();
+        if (existingQuestions && existingQuestions.length > 0) {
+          payload.parent_id = existingQuestions[0].id;
+          payload.order = existingQuestions.length + 1;
+        }
+      } catch {
+        // ignore fallback
+      }
+
+      return this.request('/api/challenges/', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.error('Error creating question:', error);
+      throw error;
+    }
+  }
+
+  // Mavjud savolni yangilash
+  async updateQuestion(id: string, data: any): Promise<any> {
+    // Map incoming frontend shape to backend-compatible fields
+    try {
+      if (data.type === 'test') {
+        const tests = (data.options || []).map((opt: any, idx: number) => ({
+          prompt: data.content || '',
+          options: data.options || [],
+          correct: data.correctAnswer ?? 0,
+        }));
+
+        const payload = {
+          title: data.title,
+          description: data.content || '',
+          tests,
+          start_time: data.startDate || null,
+          end_time: data.endDate || null,
+          is_private: data.targetType !== 'all',
+        } as any;
+
+        return this.request(`/api/tests/${id}/`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+      }
+
+      const test_cases = (data.testCases || []).map((tc: any) => ({ input: tc.input, expected_output: tc.expectedOutput }));
+      const timeLimitSeconds = Math.max(1, (data.duration || 0) * 60);
+      const payload = {
+        title: data.title,
+        description: data.content || '',
+        languages: data.languages || (data.type === 'code' ? ['cpp'] : []),
+        test_cases,
+        time_limit: timeLimitSeconds,
+        difficulty: data.difficulty || 'medium',
+        max_score: data.max_score || 100,
+        autocheck: typeof data.autocheck !== 'undefined' ? data.autocheck : (data.type === 'code'),
+        memory_limit: data.memory_limit || 256,
+        is_private: data.targetType !== 'all',
+        start_time: data.startDate || null,
+        end_time: data.endDate || null,
+      } as any;
+
+      return this.request(`/api/challenges/${id}/`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.error('Error updating question:', err);
+      throw err;
+    }
+  }
+
+  // Savolning status (active/inactive) ni yangilash
+  // Accepts optional `data` with fields to PATCH (e.g., start_time, end_time)
+  async updateQuestionStatus(id: string, isActive: boolean, data?: any): Promise<any> {
+    const payload = { ...(data || {}) };
+    // Try updating challenge first, fall back to test endpoint if 404
+    try {
+      return await this.request(`/api/challenges/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      // if not found, try tests endpoint
+      const status = (err as any)?.status;
+      if (status === 404) {
+        return this.request(`/api/tests/${id}/`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+      }
+      throw err;
+    }
+  }
+
+  // Savolni o'chirish
+  async deleteQuestion(id: string): Promise<void> {
+    try {
+      return await this.request(`/api/challenges/${id}/`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      if ((err as any)?.status === 404) {
+        return this.request(`/api/tests/${id}/`, { method: 'DELETE' });
+      }
+      throw err;
+    }
+  }
+
+  // Javobni yuborish
+  async submitAnswer(data: {
+    questionId: string;
+    answer: string | number;
+    submittedAt: string;
+    timeSpent?: number | null;
+    type: 'test' | 'text' | 'code';
+    // Test uchun qo'shimcha ma'lumotlar
+    selectedOption?: number;
+    options?: string[];
+    // Kod uchun qo'shimcha ma'lumotlar
+    language?: string;
+    executionTime?: number;
+    memoryUsed?: number;
+    testResults?: Array<{
+      input: string;
+      expectedOutput: string;
+      actualOutput: string;
+      passed: boolean;
+      executionTime?: number;
+      memoryUsed?: number;
+      error?: string;
+    }>;
+  }): Promise<any> {
+    // Route submission based on type to backend endpoints and map required fields
+    if (data.type === 'code') {
+      // Code submissions expect 'challenge' FK and 'code' JSON + test_results
+      const payload: any = {
+        challenge: data.questionId,
+        code: {
+          source: data.answer,
+          language: data.language || 'cpp',
+        },
+        test_results: data.testResults || [],
+        submitted_at: data.submittedAt,
+        time_spent: data.timeSpent ?? null,
+      };
+
+      return this.request('/api/submissions/', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
+
+    if (data.type === 'test') {
+      // Test submissions use TestSubmission model: expects 'test' FK and 'answers' list
+      // Map single-question answers into answers array
+      const answers = [] as any[];
+      if (typeof data.selectedOption !== 'undefined') {
+        answers.push({ question_index: 0, selected: data.selectedOption });
+      }
+
+      const payload: any = {
+        test: data.questionId,
+        answers,
+        submitted_at: data.submittedAt,
+      };
+
+      return this.request('/api/test-submissions/', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
+
+    // Fallback for text or unknown types: try to post as a CodeSubmission with minimal shape
+    const fallback: any = {
+      challenge: data.questionId,
+      code: { source: String(data.answer), language: data.language || 'text' },
+      test_results: [],
+      submitted_at: data.submittedAt,
+    };
+    return this.request('/api/submissions/', {
+      method: 'POST',
+      body: JSON.stringify(fallback),
+    });
+  }
+  
+  // Berilgan javoblarni olish
+  async getSubmissions(): Promise<any[]> {
+    return this.request('/api/submissions/');
+  }
+
+  // Ma'lum bir savolga berilgan javoblarni olish
+  async getQuestionSubmissions(questionId: string): Promise<any[]> {
+    return this.request(`/api/submissions/?question=${questionId}`);
+  }
+
+  // Ma'lum bir studentning javoblarini olish
+  async getStudentSubmissions(studentId: string): Promise<any[]> {
+    return this.request(`/api/submissions/?student=${studentId}`);
+  }
+
+  // Javobni baholash
+  async evaluateSubmission(submissionId: string, data: {
+    score: number;
+    feedback?: string;
+    status: 'accepted' | 'rejected' | 'partially_accepted';
+    checkedTestCases?: Array<{
+      index: number;
+      passed: boolean;
+      feedback?: string;
+    }>;
+  }): Promise<any> {
+    return this.request(`/api/submissions/${submissionId}/evaluate/`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  // Javobni baholash
+  async evaluateSubmission(submissionId: number, score: number): Promise<any> {
+    return this.request(`/api/submissions/${submissionId}/evaluate/`, {
+      method: 'POST',
+      body: JSON.stringify({ score })
+    });
   }
 
   // Ensure CSRF cookie exists (call once on app init)

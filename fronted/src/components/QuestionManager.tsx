@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './QuestionManager.css';
+import apiService from '../services/api';
 
 interface TestCase {
   input: string;
@@ -47,17 +48,21 @@ function QuestionManager() {
   const [testCases, setTestCases] = useState<TestCase[]>([{ input: '', expectedOutput: '' }]);
 
   useEffect(() => {
-    const stored = localStorage.getItem('questions');
-    if (stored) {
-      setQuestions(JSON.parse(stored));
-    }
+    const loadQuestions = async () => {
+      try {
+        const questions = await apiService.getQuestions();
+        setQuestions(questions);
+      } catch (error) {
+        console.error('Savollarni yuklashda xatolik:', error);
+      }
+    };
+    loadQuestions();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const questionData: Question = {
-      id: editingQuestion ? editingQuestion.id : Date.now().toString(),
+    const questionData = {
       title,
       type,
       targetType,
@@ -65,29 +70,66 @@ function QuestionManager() {
       startDate,
       endDate,
       duration,
-      isActive: editingQuestion ? editingQuestion.isActive : false,
-      // Keep content for all question types — test questions also include a question text.
-      content: content,
+      content,
       options: type === 'test' ? options.filter(o => o.trim() !== '') : undefined,
       correctAnswer: type === 'test' ? correctAnswer : undefined,
-      testCases: type === 'code' ? testCases.filter(tc => tc.input.trim() !== '' && tc.expectedOutput.trim() !== '') : undefined
+      testCases: type === 'code' ? testCases.filter(tc => (tc.input || '').toString().trim() !== '' && (tc.expectedOutput || '').toString().trim() !== '') : undefined
     };
 
-    let updated;
-    if (editingQuestion) {
-      updated = questions.map(q => q.id === editingQuestion.id ? questionData : q);
-    } else {
-      updated = [...questions, questionData];
+    // If code type and testCases are empty but teacher pasted JSON into content,
+    // try to parse content as JSON array of testcases and move it to testCases.
+    if (type === 'code') {
+      const hasCases = Array.isArray(questionData.testCases) && questionData.testCases.length > 0;
+      const maybeJson = (content || '').trim();
+      if (!hasCases && maybeJson.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(maybeJson);
+          if (Array.isArray(parsed)) {
+            // Normalize array entries to {input, expectedOutput}
+            const normalized: TestCase[] = parsed.map((p: any) => ({
+              input: (p.input ?? p.in ?? p.stdin ?? '') + '',
+              expectedOutput: (p.expected_output ?? p.expectedOutput ?? p.out ?? p.stdout ?? '') + ''
+            }));
+            questionData.testCases = normalized.filter(tc => tc.input.trim() !== '');
+            // clear content to avoid storing JSON in description
+            questionData.content = '';
+          }
+        } catch (err) {
+          // ignore parse errors, keep original content
+        }
+      }
     }
 
-    setQuestions(updated);
-    localStorage.setItem('questions', JSON.stringify(updated));
-    
-    resetForm();
-    // exiting form (final save) cancels continuation mode
-    setShowForm(false);
-    setEditingQuestion(null);
-    setContinuationMode(false);
+    try {
+      let response;
+      if (editingQuestion) {
+        // Update existing question
+        response = await apiService.updateQuestion(editingQuestion.id, questionData);
+        const updated = questions.map(q => q.id === editingQuestion.id ? response : q);
+        setQuestions(updated);
+      } else {
+        // Create new question
+        response = await apiService.createQuestion(questionData);
+        setQuestions([...questions, response]);
+      }
+
+      // Show success message
+      const toast = document.createElement('div');
+      toast.className = 'toast success';
+      toast.textContent = editingQuestion ? 'Savol yangilandi' : 'Yangi savol qo\'shildi';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+      
+      resetForm();
+      setShowForm(false);
+      setEditingQuestion(null);
+      setContinuationMode(false);
+    } catch (error) {
+      console.error('Savolni saqlashda xatolik:', error);
+      const msg = (error as any)?.message || String(error);
+      const body = (error as any)?.body ? `\nBackend: ${(error as any).body}` : '';
+      alert(`Savolni saqlashda xatolik: ${msg}${body}`);
+    }
   };
 
   // Save and keep the form open for adding the next question
@@ -205,26 +247,58 @@ function QuestionManager() {
     setShowForm(true);
   };
 
-  const handleStart = (id: string) => {
-    const updated = questions.map(q => 
-      q.id === id ? { ...q, isActive: true } : q
-    );
-    setQuestions(updated);
-    localStorage.setItem('questions', JSON.stringify(updated));
+  const handleStart = async (id: string) => {
+    try {
+      // compute start and end time based on local duration (minutes)
+      const q = questions.find(x => x.id === id);
+      const now = new Date();
+      const start_time = now.toISOString();
+      let end_time: string | null = null;
+      if (q && q.duration) {
+        const end = new Date(now.getTime() + q.duration * 60 * 1000);
+        end_time = end.toISOString();
+      }
+
+      await apiService.updateQuestionStatus(id, true, { start_time, end_time });
+      const updated = questions.map(q => 
+        q.id === id ? { ...q, isActive: true, startDate: start_time, endDate: end_time } : q
+      );
+      setQuestions(updated);
+    } catch (error) {
+      console.error('Savolni faollashtirshda xatolik:', error);
+      const body = (error as any)?.body || (error as any)?.message || String(error);
+      alert(`Savolni faollashtirshda xatolik: ${body}`);
+    }
   };
 
-  const handleStop = (id: string) => {
-    const updated = questions.map(q => 
-      q.id === id ? { ...q, isActive: false } : q
-    );
-    setQuestions(updated);
-    localStorage.setItem('questions', JSON.stringify(updated));
+  const handleStop = async (id: string) => {
+    try {
+      const now = new Date().toISOString();
+      await apiService.updateQuestionStatus(id, false, { end_time: now });
+      const updated = questions.map(q => 
+        q.id === id ? { ...q, isActive: false, endDate: now } : q
+      );
+      setQuestions(updated);
+    } catch (error) {
+      console.error("Savolni to'xtatishda xatolik:", error);
+      const body = (error as any)?.body || (error as any)?.message || String(error);
+      alert(`Savolni to'xtatishda xatolik: ${body}`);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    const updated = questions.filter(q => q.id !== id);
-    setQuestions(updated);
-    localStorage.setItem('questions', JSON.stringify(updated));
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Bu savolni o\'chirishni istaysizmi?')) {
+      return;
+    }
+    
+    try {
+      await apiService.deleteQuestion(id);
+      const updated = questions.filter(q => q.id !== id);
+      setQuestions(updated);
+    } catch (error) {
+      console.error('Savolni o\'chirishda xatolik:', error);
+      alert('Savolni o\'chirishda xatolik yuz berdi');
+    }
   };
 
   const handleOptionChange = (index: number, value: string) => {

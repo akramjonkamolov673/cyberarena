@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import './StudentPanel.css';
+import Answer from './Answer';
 
 interface UserData {
   profileImage?: string;
@@ -58,6 +59,17 @@ function StudentPanel({ onLogout }: StudentPanelProps) {
   
   const handleOpenChallenge = (challenge: QuestionItem) => {
     setSelectedChallenge(challenge);
+  };
+
+  const handleSubmitAnswer = async (answerData: any) => {
+    try {
+      await apiService.submitAnswer(answerData);
+      alert('Javob muvaffaqiyatli yuborildi!');
+      setSelectedChallenge(null);
+    } catch (error) {
+      console.error('Javobni yuborishda xatolik:', error);
+      alert('Javobni yuborishda xatolik yuz berdi');
+    }
   };
 
   useEffect(() => {
@@ -259,7 +271,7 @@ function StudentPanel({ onLogout }: StudentPanelProps) {
             ) : (
               <div className="announcements-list">
                 {announcements.map((announcement, index) => (
-                  <div key={index} className="announcement-card">
+                  <div key={announcement.id ?? index} className="announcement-card">
                     <h3>
                       <i className="fas fa-bullhorn"></i>
                       <span>{announcement.title}</span>
@@ -267,7 +279,7 @@ function StudentPanel({ onLogout }: StudentPanelProps) {
                     <p>{announcement.content}</p>
                     <span className="date">
                       <i className="fas fa-clock"></i>
-                      <span>{announcement.date}</span>
+                      <span>{announcement.createdAt || announcement.date || ''}</span>
                     </span>
                   </div>
                 ))}
@@ -334,14 +346,11 @@ function StudentPanel({ onLogout }: StudentPanelProps) {
                           </div>
                         )}
                       </div>
-                      <div className="code-editor-placeholder">
-                        <i className="fas fa-code"></i>
-                        <p>Kod yozish interfeysi ishlab chiqilmoqda...</p>
-                        <button className="submit-btn" onClick={() => setSelectedChallenge(null)}>
-                          <i className="fas fa-arrow-left"></i>
-                          Orqaga qaytish
-                        </button>
-                      </div>
+                      <Answer 
+                        question={selectedChallenge}
+                        onSubmit={handleSubmitAnswer}
+                        onClose={() => setSelectedChallenge(null)}
+                      />
                     </div>
                   </div>
                 );
@@ -440,7 +449,7 @@ function StudentPanel({ onLogout }: StudentPanelProps) {
                   </thead>
                   <tbody>
                     {results.map((result, index) => (
-                      <tr key={index}>
+                      <tr key={result.id ?? index}>
                         <td className="rank">#{index + 1}</td>
                         <td>{result.name}</td>
                         <td>{result.group}</td>
