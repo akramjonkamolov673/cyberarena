@@ -337,8 +337,8 @@ class ApiService {
         });
       }
 
-      // For code or text challenges use CodingChallenge model
-      const languages = data.type === 'code' ? ['cpp'] : [];
+  // For code or text challenges use CodingChallenge model
+  const languages = (data as any).languages || (data.type === 'code' ? ['cpp'] : []);
       const test_cases = (data.testCases || []).map(tc => ({ input: tc.input, expected_output: tc.expectedOutput }));
 
       const timeLimitSeconds = Math.max(1, (data.duration || 0) * 60);
@@ -617,6 +617,7 @@ declare module './api' {}
     lastName: p.last_name || '',
     nickname: p.username || '',
     subject: '',
+    role: p.profile?.role || 'student',
     email: p.email || '',
   };
 };

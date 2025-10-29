@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './TeacherPanel.css';
 import QuestionManager from './QuestionManager';
+import CodeChallengeManager from './CodeChallengeManager';
 import apiService from '../services/api';
 
 interface UserData {
@@ -10,6 +11,7 @@ interface UserData {
   lastName: string;
   nickname: string;
   subject: string;
+  role?: string;
   email: string;
 }
 
@@ -34,7 +36,7 @@ interface TeacherPanelProps {
 
 function TeacherPanel({ onLogout }: TeacherPanelProps) {
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [activeTab, setActiveTab] = useState<'answers' | 'announcements' | 'statistics' | 'results' | 'questions'>('answers');
+  const [activeTab, setActiveTab] = useState<'answers' | 'announcements' | 'statistics' | 'results' | 'questions' | 'codechallenges'>('answers');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -164,6 +166,17 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
             <i className="fas fa-question-circle"></i>
             <span>Savollar</span>
           </button>
+          {/* Code Challenges tab - teacher only */}
+          {userData.role === 'teacher' && (
+            <button 
+              className={`nav-btn ${activeTab === 'codechallenges' ? 'active' : ''}`}
+              onClick={() => setActiveTab('codechallenges')}
+              style={{ display: 'flex' }}
+            >
+              <i className="fas fa-terminal"></i>
+              <span>Kod savollar</span>
+            </button>
+          )}
           
           <div className="profile-dropdown">
             <button 
@@ -218,6 +231,11 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
 
         {activeTab === 'questions' && (
           <QuestionManager />
+        )}
+
+        {activeTab === 'codechallenges' && (
+          // show code-only manager; only usable by teachers (server enforces permissions)
+          <CodeChallengeManager />
         )}
       </div>
     </div>

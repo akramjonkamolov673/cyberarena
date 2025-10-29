@@ -1,13 +1,14 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from tasks.views import TestSetViewSet, CodingChallengeViewSet, CodeSubmissionViewSet, TestSubmissionViewSet
+from tasks.views import TestSetViewSet, CodingChallengeViewSet, CodeSubmissionViewSet, TestSubmissionViewSet, ChallengeGroupViewSet
 from django.conf import settings
 from django.conf.urls.static import static
 
 router = DefaultRouter()
 router.register(r'tests', TestSetViewSet, basename='testset')
 router.register(r'challenges', CodingChallengeViewSet, basename='codingchallenge')
+router.register(r'challenge-groups', ChallengeGroupViewSet, basename='challengegroup')
 router.register(r'submissions', CodeSubmissionViewSet, basename='codesubmission')
 router.register(r'test-submissions', TestSubmissionViewSet, basename='testsubmission')
 

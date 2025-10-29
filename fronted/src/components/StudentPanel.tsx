@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import './StudentPanel.css';
 import Answer from './Answer';
+import CodeChallengeRunner from './CodeChallengeRunner';
+// ensure the imported component is referenced so TypeScript/linters recognise its usage in JSX
+void CodeChallengeRunner;
 
 interface UserData {
   profileImage?: string;
@@ -28,11 +31,12 @@ interface QuestionItem {
   options?: string[];
   correctAnswer?: number;
   // backend uses snake_case for times
-  start_time?: string | null;
-  end_time?: string | null;
-  // older frontend used camelCase — accept both
-  startDate?: string | null;
-  endDate?: string | null;
+  // keep these as optional strings (avoid `null`) so they're compatible with other components
+  start_time?: string;
+  end_time?: string;
+  // older frontend used camelCase — accept both (optional strings)
+  startDate?: string;
+  endDate?: string;
   // duration in minutes (legacy) or time_limit in seconds (challenge)
   duration?: number;
   time_limit?: number;
@@ -48,7 +52,7 @@ interface QuestionItem {
 
 function StudentPanel({ onLogout }: StudentPanelProps) {
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [activeTab, setActiveTab] = useState<'announcements' | 'questions' | 'profile' | 'results' | 'myresults'>('announcements');
+  const [activeTab, setActiveTab] = useState<'announcements' | 'questions' | 'profile' | 'results' | 'myresults' | 'codebattle'>('announcements');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]);
@@ -182,6 +186,13 @@ function StudentPanel({ onLogout }: StudentPanelProps) {
           >
             <i className="fas fa-question-circle"></i>
             <span>Savollar</span>
+          </button>
+          <button
+            className={`nav-btn ${activeTab === 'codebattle' ? 'active' : ''}`}
+            onClick={() => setActiveTab('codebattle')}
+          >
+            <i className="fas fa-bolt"></i>
+            <span>CodeBattle</span>
           </button>
           <button 
             className={`nav-btn ${activeTab === 'myresults' ? 'active' : ''}`}

@@ -63,6 +63,47 @@ class CodingChallenge(models.Model):
         return f"{self.title} ({langs}) - {self.difficulty}"
 
 
+class ChallengeGroup(models.Model):
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_challenge_groups')
+    challenges = models.ManyToManyField('CodingChallenge', blank=True, related_name='groups')
+    start_time = models.DateTimeField(blank=True, null=True)
+    end_time = models.DateTimeField(blank=True, null=True)
+    is_private = models.BooleanField(default=True)
+    assigned_users = models.ManyToManyField(User, blank=True, related_name='assigned_challenge_groups')
+    allowed_groups = models.ManyToManyField(Group, blank=True, related_name='allowed_challenge_groups')
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title
+
+    def apply_group_rules(self, challenge: 'CodingChallenge' = None):
+        """
+        Inherit privacy and audience from this group to its challenges.
+        - is_private from group
+        - union assigned_users and allowed_groups
+        - optionally inherit start/end window if set on group
+        """
+        targets = [challenge] if challenge is not None else list(self.challenges.all())
+        for ch in targets:
+            ch.is_private = self.is_private
+            # Inherit temporal window if provided on group
+            if self.start_time:
+                ch.start_time = self.start_time
+            if self.end_time:
+                ch.end_time = self.end_time
+            ch.save(update_fields=['is_private', 'start_time', 'end_time'])
+            # Merge assigned users and groups
+            if self.assigned_users.exists():
+                ch.assigned_users.add(*self.assigned_users.all())
+            if self.allowed_groups.exists():
+                ch.allowed_groups.add(*self.allowed_groups.all())
+
+
 class CodeSubmission(models.Model):
     challenge = models.ForeignKey(CodingChallenge, on_delete=models.CASCADE, related_name="submissions")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="code_submissions")

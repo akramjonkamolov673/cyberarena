@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import TestSet, CodingChallenge, CodeSubmission, TestSubmission
+from .models import TestSet, CodingChallenge, CodeSubmission, TestSubmission, ChallengeGroup
 
 
 @admin.register(TestSet)
@@ -29,3 +29,11 @@ class TestSubmissionAdmin(admin.ModelAdmin):
     list_display = ('id', 'test', 'user', 'score', 'correct_count', 'wrong_count', 'submitted_at')
     list_filter = ('submitted_at',)
     search_fields = ('test__title', 'user__username')
+
+
+@admin.register(ChallengeGroup)
+class ChallengeGroupAdmin(admin.ModelAdmin):
+    list_display = ('title', 'created_by', 'start_time', 'end_time', 'is_private')
+    list_filter = ('is_private', 'start_time', 'end_time', 'created_at')
+    search_fields = ('title', 'description', 'created_by__username')
+    filter_horizontal = ('assigned_users', 'allowed_groups', 'challenges')
