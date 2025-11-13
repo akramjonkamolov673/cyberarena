@@ -115,7 +115,7 @@ class ApiService {
     return v ? v.pop() : "";
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  public async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const method = (options.method || "GET").toUpperCase();
 
