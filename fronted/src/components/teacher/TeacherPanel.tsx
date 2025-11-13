@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './TeacherPanel.css';
 import QuestionManager from './QuestionManager';
+import CodeChallenge from './CodeChallenge';
 import apiService from '../../services/api';
 
 interface UserData {
@@ -18,9 +19,12 @@ interface TeacherPanelProps {
   onLogout: () => void;
 }
 
+type TabType = 'questions' | 'codeChallenge';
+
 function TeacherPanel({ onLogout }: TeacherPanelProps) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>('questions');
 
   useEffect(() => {
     loadUserData();
@@ -89,6 +93,16 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
     );
   }
 
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'codeChallenge':
+        return <CodeChallenge />;
+      case 'questions':
+      default:
+        return <QuestionManager />;
+    }
+  };
+
   return (
     <div className="teacher-panel">
       <header className="navbar">
@@ -97,9 +111,16 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
         </div>
         <nav className="nav-links">
           <button 
-            className="nav-link active"
+            className={`nav-link ${activeTab === 'questions' ? 'active' : ''}`}
+            onClick={() => setActiveTab('questions')}
           >
             Savollar
+          </button>
+          <button 
+            className={`nav-link ${activeTab === 'codeChallenge' ? 'active' : ''}`}
+            onClick={() => setActiveTab('codeChallenge')}
+          >
+            CodeTrain
           </button>
           <button 
             className="nav-link"
@@ -122,7 +143,7 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
       </header>
 
       <main className="panel-content">
-        <QuestionManager />
+        {renderContent()}
       </main>
     </div>
   );
