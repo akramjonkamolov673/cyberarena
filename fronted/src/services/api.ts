@@ -1,4 +1,5 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import type { Block, Challenge } from "../types/block";
 
 // ===== TYPES =====
 
@@ -135,24 +136,46 @@ class ApiService {
       if (csrf) headers["X-CSRFToken"] = csrf;
     }
 
-    const doFetch = () =>
-      fetch(url, {
+    const doFetch = async () => {
+      return await fetch(url, {
         ...options,
         headers,
         credentials: "include",
       });
+    };
 
     let response = await doFetch();
 
     if (response.status === 401) {
-      const refresh = await fetch(`${this.baseUrl}/api/users/refresh/`, {
+      const refreshResponse = await fetch(`${this.baseUrl}/api/users/refresh/`, {
         method: "POST",
         credentials: "include",
-        headers: { "X-CSRFToken": this.getCookie("csrftoken") || "" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRFToken": this.getCookie("csrftoken") || "" 
+        },
       });
 
-      if (refresh.ok) response = await doFetch();
-      else throw new Error("Sessiya tugadi. Qayta kiring.");
+      if (refreshResponse.ok) {
+        const refreshData = await refreshResponse.json();
+        if (refreshData.access) {
+          localStorage.setItem('token', refreshData.access);
+          headers["Authorization"] = `Bearer ${refreshData.access}`;
+          response = await fetch(url, {
+            ...options,
+            headers,
+            credentials: "include",
+          });
+        } else {
+          throw new Error("Yangi token olinmadi");
+        }
+      } else {
+        console.error('Failed to refresh token');
+        // Token yangilanmadi, foydalanuvchini chiqarib yuboramiz
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        throw new Error("Sessiya tugadi. Qayta kiring.");
+      }
     }
 
     if (!response.ok) {
@@ -297,11 +320,75 @@ class ApiService {
     return this.request(`/api/submissions/?question=${id}`);
   }
 
-  evaluateSubmission(id: string | number, data: any) {
+  async evaluateSubmission(id: string | number, data: any) {
     return this.request(`/api/submissions/${id}/evaluate/`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // Challenge Groups
+  async getChallengeGroup(id: number) {
+    return this.request<Block>(`/api/challenge-groups/${id}/`);
+  }
+
+  async getChallengeGroups() {
+    const groups = await this.request<Block[]>('/api/challenge-groups/');
+    // Add challenges_count to each group if not present
+    return groups.map(group => ({
+      ...group,
+      challenges_count: group.challenges_count || (group.challenges ? group.challenges.length : 0)
+    }));
+  }
+
+  async getChallenges() {
+    return this.request<Challenge[]>('/api/challenges/');
+  }
+
+  async createChallengeGroup(data: Omit<Block, 'id'>) {
+    return this.request<Block>('/api/challenge-groups/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateChallengeGroup(id: number, data: Partial<Block>) {
+    return this.request<Block>(`/api/challenge-groups/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteChallengeGroup(id: number) {
+    return this.request(`/api/challenge-groups/${id}/`, {
+      method: 'DELETE',
+    });
+  }
+
+  async updateBlockChallenges(blockId: number, challengeIds: number[]) {
+    // Faqat to'g'ri raqamli ID larni qoldirib, null/undefined/not a number larni olib tashlaymiz
+    const validChallengeIds = challengeIds.filter(id => 
+      id !== null && id !== undefined && !isNaN(Number(id))
+    );
+    
+    try {
+      const requestData = { 
+        challenges: validChallengeIds
+      };
+      
+      const result = await this.request(`/api/challenge-groups/${blockId}/`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Update failed with error:', error);
+      throw error;
+    }
   }
 
   // ===================== STATS / ANNOUNCEMENTS =====================

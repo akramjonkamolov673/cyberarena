@@ -19,12 +19,24 @@ interface TeacherPanelProps {
   onLogout: () => void;
 }
 
-type TabType = 'questions' | 'codeChallenge';
+type TabType = 'questions' | 'codeChallenge' | 'codeBattle';
 
 function TeacherPanel({ onLogout }: TeacherPanelProps) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('questions');
+  
+  // Import ChallengeGroupPage dynamically to avoid circular dependencies
+  const [ChallengeGroupPage, setChallengeGroupPage] = useState<React.ComponentType | null>(null);
+  
+  useEffect(() => {
+    // Dynamically import ChallengeGroupPage when needed
+    if (activeTab === 'codeBattle' && !ChallengeGroupPage) {
+      import('./ChallengeGroupPage').then(module => {
+        setChallengeGroupPage(() => module.default);
+      });
+    }
+  }, [activeTab, ChallengeGroupPage]);
 
   useEffect(() => {
     loadUserData();
@@ -95,6 +107,8 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'codeBattle':
+        return ChallengeGroupPage ? <ChallengeGroupPage /> : <div>Loading CodeBattle...</div>;
       case 'codeChallenge':
         return <CodeChallenge />;
       case 'questions':
@@ -123,10 +137,13 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
             CodeTrain
           </button>
           <button 
-            className="nav-link"
-            onClick={handleLogout}
+            className={`nav-link ${activeTab === 'codeBattle' ? 'active' : ''}`}
+            onClick={() => setActiveTab('codeBattle')}
           >
-            Chiqish
+            CodeBattle
+          </button>
+          <button className="nav-button" onClick={handleLogout}>
+            <i className="fas fa-sign-out-alt"></i> Chiqish
           </button>
         </nav>
         <div className="user-menu">
