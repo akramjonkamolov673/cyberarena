@@ -1,5 +1,11 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-import type { Block, Challenge } from "../types/block";
+import type { Block } from "../types/block";
+
+declare global {
+  interface Window {
+    google: any;
+  }
+}
 
 // ===== TYPES =====
 
@@ -75,7 +81,7 @@ export interface TestSet {
   end_date: string;
   questions?: Question[];
   tests?: Array<{
-    id?: number;
+    id?: number | null;
     text: string;
     options: Array<{
       id: number;
@@ -104,32 +110,101 @@ export interface EvaluationResult {
   feedback?: string;
 }
 
+export interface TestSubmissionAnswer {
+  question: number;
+  selected: number | null;
+  question_index: number;
+}
+
+export interface TestSubmission {
+  id?: number;
+  test_set: number;
+  answers: TestSubmissionAnswer[];
+  score?: number;
+  submitted_at?: string;
+}
+
+// Minimal Challenge type (import one from types if you have it)
+export interface Challenge {
+  id: number;
+  title: string;
+  slug?: string;
+  difficulty?: string;
+  [k: string]: any;
+}
+
+// Extend Block to include optional challenges_count when needed
+export interface BlockWithCount extends Block {
+  challenges_count?: number;
+}
+
 // ==========================================================
 //                       CLEAN API SERVICE
 // ==========================================================
 
 class ApiService {
   private baseUrl = API_BASE_URL;
+  private authToken: string | null = null;
 
-  private getCookie(name: string) {
-    const v = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
-    return v ? v.pop() : "";
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+    if (token) {
+      localStorage.setItem('token', token);
+    } else {
+      localStorage.removeItem('token');
+    }
+  }
+
+  private getCookie(name: string): string | null {
+    const match = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
+    return match ? match.pop() || null : null;
+  }
+
+  private async refreshToken(): Promise<boolean> {
+    // Attempt to refresh via endpoint and store new access token if provided
+    try {
+      const resp = await fetch(`${this.baseUrl}/api/users/refresh/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": this.getCookie("csrftoken") || ""
+        },
+      });
+
+      if (!resp.ok) return false;
+      const data = await resp.json().catch(() => ({}));
+      const newToken = data.access || data.token || data.detail && null;
+
+      if (newToken) {
+        this.setAuthToken(newToken);
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      console.error("refreshToken error:", e);
+      return false;
+    }
   }
 
   public async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const method = (options.method || "GET").toUpperCase();
 
-    const headers: Record<string, string> = {
-      ...(options.headers as Record<string, string>),
-    };
-
-    if (typeof options.body === "string" && !headers["Content-Type"]) {
-      headers["Content-Type"] = "application/json";
+    // Get token from localStorage if not set
+    if (!this.authToken) {
+      this.authToken = localStorage.getItem('token');
     }
 
-    const token = localStorage.getItem("token");
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    if (this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
+    }
 
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
       const csrf = this.getCookie("csrftoken");
@@ -146,32 +221,23 @@ class ApiService {
 
     let response = await doFetch();
 
+    // If unauthorized, try refresh flow once
     if (response.status === 401) {
-      const refreshResponse = await fetch(`${this.baseUrl}/api/users/refresh/`, {
-        method: "POST",
-        credentials: "include",
-        headers: { 
-          "Content-Type": "application/json",
-          "X-CSRFToken": this.getCookie("csrftoken") || "" 
-        },
-      });
+      const refreshed = await this.refreshToken();
+      if (refreshed) {
+        // update Authorization header with new token
+        if (!this.authToken) this.authToken = localStorage.getItem('token');
+        if (this.authToken) headers['Authorization'] = `Bearer ${this.authToken}`;
 
-      if (refreshResponse.ok) {
-        const refreshData = await refreshResponse.json();
-        if (refreshData.access) {
-          localStorage.setItem('token', refreshData.access);
-          headers["Authorization"] = `Bearer ${refreshData.access}`;
-          response = await fetch(url, {
-            ...options,
-            headers,
-            credentials: "include",
-          });
-        } else {
-          throw new Error("Yangi token olinmadi");
-        }
+        // retry original request (body is reused from options)
+        response = await fetch(url, {
+          ...options,
+          headers,
+          credentials: "include",
+        });
       } else {
+        // couldn't refresh -> force logout
         console.error('Failed to refresh token');
-        // Token yangilanmadi, foydalanuvchini chiqarib yuboramiz
         localStorage.removeItem('token');
         window.location.href = '/login';
         throw new Error("Sessiya tugadi. Qayta kiring.");
@@ -193,35 +259,117 @@ class ApiService {
     }
 
     if (response.status === 204) return {} as T;
-    return response.json();
+    // try to parse JSON, but guard against empty responses
+    const text = await response.text().catch(() => "");
+    return text ? JSON.parse(text) as T : ({} as T);
   }
 
-  // ===================== AUTH =====================
+  // ===================== TEST SUBMISSIONS =====================
+
+  async submitTestAnswers(testId: number, answers: TestSubmissionAnswer[]): Promise<TestSubmission> {
+    // Ensure we have a token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('No authentication token found');
+      throw new Error('Siz tizimga kirmagansiz. Iltimos, avval tizimga kiring.');
+    }
+
+    const requestBody = {
+      test_set: testId,
+      answers: answers.map(answer => ({
+        question: answer.question,
+        selected: answer.selected,
+        question_index: answer.question_index
+      }))
+    };
+
+    return this.request<TestSubmission>('/api/test-submissions/', {
+      method: 'POST',
+      body: JSON.stringify(requestBody)
+    });
+  }
+
+  async getTestSubmissions(testId?: number): Promise<TestSubmission[]> {
+    const url = testId 
+      ? `/api/test-submissions/?test_set=${testId}`
+      : '/api/test-submissions/';
+    return this.request<TestSubmission[]>(url);
+  }
+
+  async getTestSubmission(submissionId: number): Promise<TestSubmission> {
+    return this.request<TestSubmission>(`/api/test-submissions/${submissionId}/`);
+  }
+
+  // ===================== AUTHENTICATION =====================
+
+  async login(data: LoginData): Promise<LoginResponse> {
+    const response = await this.request<LoginResponse>('/api/users/login/', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+
+    if (response.token) {
+      this.setAuthToken(response.token);
+      localStorage.setItem('isLoggedIn', 'true');
+    }
+
+    return response;
+  }
+
+  async googleAuth(accessToken: string): Promise<LoginResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/users/auth/google/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': this.getCookie('csrftoken') || ''
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          token: accessToken
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+          throw new Error(data.error || 'Google authentication failed');
+      }
+
+      if (data.access) {
+        this.setAuthToken(data.access);
+        localStorage.setItem('isLoggedIn', 'true');
+        return { ...data, token: data.access };
+      }
+
+      throw new Error('No access token in response');
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async githubAuth(code: string): Promise<LoginResponse> {
+    const response = await this.request<LoginResponse>('/api/social-auth/github/', {
+      method: 'POST',
+      body: JSON.stringify({
+        code,
+        provider: 'github'
+      })
+    });
+
+    if (response.token) {
+      this.setAuthToken(response.token);
+      localStorage.setItem('isLoggedIn', 'true');
+    }
+
+    return response;
+  }
 
   register(data: RegisterData) {
     return this.request<LoginResponse>("/api/users/register/", {
       method: "POST",
       body: JSON.stringify(data),
     });
-  }
-
-  login(data: LoginData) {
-    return this.request<LoginResponse>("/api/users/login/", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }).then((resp) => {
-      if (resp.token) localStorage.setItem("token", resp.token);
-      if (resp.refresh_token) localStorage.setItem("refresh_token", resp.refresh_token);
-      return resp;
-    });
-  }
-
-  refreshToken() {
-    return fetch(`${this.baseUrl}/api/users/refresh/`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "X-CSRFToken": this.getCookie("csrftoken") || "" },
-    }).then((r) => r.ok);
   }
 
   // ===================== PROFILE =====================
@@ -253,12 +401,42 @@ class ApiService {
 
   // ===================== TESTS / QUESTIONS =====================
 
-  getTestSets() {
-    return this.request<TestSet[]>("/api/tests/");
+  async getTestSets() {
+    try {
+      return await this.request<TestSet[]>("/api/tests/");
+    } catch (error) {
+      throw error;
+    }
   }
 
-  getTestSet(id: number) {
+  async getTestSet(id: number) {
     return this.request<TestSet>(`/api/tests/${id}/`);
+  }
+
+  async getTestSetDetails(id: number) {
+    try {
+      const response = await this.request<TestSet>(`/api/tests/${id}/`);
+
+      if (response.tests && Array.isArray(response.tests)) {
+        const questions = response.tests.map((test: any, index: number) => ({
+          // preserve backend-provided id if present
+          id: test.id ?? (index + 1),
+          text: test.text,
+          options: test.options || [],
+          correct_answer: test.correct_answer ?? null
+        }));
+
+        return {
+          ...response,
+          questions: questions
+        } as TestSet;
+      }
+
+      return response;
+    } catch (error) {
+      console.error(`Test ${id} tafsilotlarini yuklashda xatolik:`, error);
+      throw error;
+    }
   }
 
   createTestSet(data: Omit<TestSet, "id">) {
@@ -280,26 +458,56 @@ class ApiService {
   }
 
   getTestSetQuestions(testSetId: number) {
-    return this.request(`/api/tests/${testSetId}/questions/`);
+    return this.request(`/api/tests/${testSetId}/`);
   }
 
-  createTestSetQuestion(testSetId: number, data: any) {
-    return this.request(`/api/tests/${testSetId}/questions/`, {
-      method: "POST",
-      body: JSON.stringify(data),
+  async createTestSetQuestion(testSetId: number, data: any) {
+    const testSet = await this.getTestSet(testSetId);
+
+    const newQuestion = {
+      text: data.text,
+      options: data.options.map((opt: any, index: number) => ({
+        id: opt.id ?? index + 1,
+        text: opt.text,
+        is_correct: !!opt.is_correct
+      })),
+      correct_answer: data.correct_answer ?? null
+    };
+
+    const updatedTests = [...(testSet.tests || []), newQuestion];
+
+    return this.updateTestSet(testSetId, {
+      tests: updatedTests
     });
   }
 
-  updateQuestion(questionId: number, data: any) {
-    return this.request(`/api/questions/${questionId}/`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
+  async updateQuestion(testSetId: number, questionIndex: number, data: any) {
+    const testSet = await this.getTestSet(testSetId);
+    const updatedTests = [...(testSet.tests || [])];
+
+    updatedTests[questionIndex] = {
+      ...updatedTests[questionIndex],
+      text: data.text,
+      options: data.options.map((opt: any, index: number) => ({
+        id: opt.id ?? index + 1,
+        text: opt.text,
+        is_correct: !!opt.is_correct
+      })),
+      correct_answer: data.correct_answer ?? null
+    };
+
+    return this.updateTestSet(testSetId, {
+      tests: updatedTests
     });
   }
 
-  deleteQuestion(questionId: number) {
-    return this.request(`/api/questions/${questionId}/`, {
-      method: "DELETE",
+  async deleteQuestion(testSetId: number, questionIndex: number) {
+    const testSet = await this.getTestSet(testSetId);
+    const updatedTests = [...(testSet.tests || [])];
+    updatedTests.splice(questionIndex, 1);
+
+    return this.updateTestSet(testSetId, {
+      tests: updatedTests
     });
   }
 
@@ -332,12 +540,11 @@ class ApiService {
     return this.request<Block>(`/api/challenge-groups/${id}/`);
   }
 
-  async getChallengeGroups() {
+  async getChallengeGroups(): Promise<BlockWithCount[]> {
     const groups = await this.request<Block[]>('/api/challenge-groups/');
-    // Add challenges_count to each group if not present
     return groups.map(group => ({
       ...group,
-      challenges_count: group.challenges_count || (group.challenges ? group.challenges.length : 0)
+      challenges_count: (group as any).challenges_count ?? ((group as any).challenges ? (group as any).challenges.length : 0)
     }));
   }
 
@@ -366,24 +573,20 @@ class ApiService {
   }
 
   async updateBlockChallenges(blockId: number, challengeIds: number[]) {
-    // Faqat to'g'ri raqamli ID larni qoldirib, null/undefined/not a number larni olib tashlaymiz
-    const validChallengeIds = challengeIds.filter(id => 
+    const validChallengeIds = challengeIds.filter(id =>
       id !== null && id !== undefined && !isNaN(Number(id))
     );
-    
+
     try {
-      const requestData = { 
+      const requestData = {
         challenges: validChallengeIds
       };
-      
+
       const result = await this.request(`/api/challenge-groups/${blockId}/`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(requestData),
       });
-      
+
       return result;
     } catch (error) {
       console.error('Update failed with error:', error);

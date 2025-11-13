@@ -26,9 +26,16 @@ class CodeSubmissionSerializer(serializers.ModelSerializer):
 
 
 class TestSubmissionSerializer(serializers.ModelSerializer):
+    test_set = serializers.PrimaryKeyRelatedField(
+        queryset=TestSet.objects.all(),
+        source='test',
+        write_only=True,
+        required=False
+    )
+    
     class Meta:
         model = TestSubmission
-        fields = '__all__'
+        fields = ['id', 'test', 'test_set', 'user', 'answers', 'correct_count', 'wrong_count', 'score', 'submitted_at']
         read_only_fields = ['user', 'submitted_at', 'correct_count', 'wrong_count', 'score']
 
 

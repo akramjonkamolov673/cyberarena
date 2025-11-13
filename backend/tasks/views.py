@@ -90,19 +90,37 @@ class TestSubmissionViewSet(viewsets.ModelViewSet):
             Q(user=user) | Q(test__created_by=user)
         ).distinct()
 
+    def create(self, request, *args, **kwargs):
+        # Handle both test and test_set in request data
+        if 'test_set' in request.data and 'test' not in request.data:
+            request.data['test'] = request.data['test_set']
+        
+        # Check if user already has a submission for this test
+        test_id = request.data.get('test') or request.data.get('test_set')
+        if test_id and TestSubmission.objects.filter(
+            user=request.user, 
+            test_id=test_id
+        ).exists():
+            from rest_framework.exceptions import ValidationError
+            from rest_framework import status
+            raise ValidationError(
+                {"detail": "Siz bu testga allaqachon javob yuborgansiz. Testni qayta topshira olmaysiz."},
+                code=status.HTTP_400_BAD_REQUEST
+            )
+            
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         obj = serializer.save(user=self.request.user)
         try:
             obj.evaluate().save()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error evaluating test submission: {e}")
 
-    def perform_update(self, serializer):
-        obj = serializer.save()
-        try:
-            obj.evaluate().save()
-        except Exception:
-            pass
+    # Update is not allowed - users can't modify their submissions
+    def update(self, request, *args, **kwargs):
+        from rest_framework.exceptions import MethodNotAllowed
+        raise MethodNotAllowed('PUT', detail="Test topshirig'ini yangilash mumkin emas")
 
 class CodingChallengeViewSet(viewsets.ModelViewSet):
     serializer_class = CodingChallengeSerializer

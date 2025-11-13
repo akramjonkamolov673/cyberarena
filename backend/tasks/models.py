@@ -131,6 +131,13 @@ class TestSubmission(models.Model):
     wrong_count = models.PositiveIntegerField(default=0)
     score = models.FloatField(default=0.0)
     submitted_at = models.DateTimeField(default=timezone.now)
+    meta = models.JSONField(default=dict, blank=True, null=True)  # For any additional metadata
+    
+    def save(self, *args, **kwargs):
+        # Ensure meta is always a dictionary, not None
+        if self.meta is None:
+            self.meta = {}
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["-submitted_at"]

@@ -91,31 +91,53 @@ function Login({ onLogin, onSwitch }: LoginProps) {
       setError('Google Client ID topilmadi. VITE_GOOGLE_CLIENT_ID ni .env faylida sozlang.');
       return;
     }
+
     try {
       setIsLoading(true);
       await loadGoogleScript();
 
-      const google = (window as any).google;
-      if (!google || !google.accounts || !google.accounts.oauth2) {
-        throw new Error('Google Identity Services mavjud emas');
-      }
-
-      const tokenResponse: { access_token: string } = await new Promise((resolve, reject) => {
-        const client = google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: 'openid email profile',
-          callback: (response: any) => {
-            if (response && response.access_token) {
-              resolve({ access_token: response.access_token });
-            } else {
-              reject(new Error('Google access token olinmadi'));
-            }
-          },
-        });
-        client.requestAccessToken();
+      await new Promise<void>((resolve) => {
+        const checkGoogle = () => {
+          if (window.google && window.google.accounts) {
+            resolve();
+          } else {
+            setTimeout(checkGoogle, 100);
+          }
+        };
+        checkGoogle();
       });
 
-      await apiService.googleAuth(tokenResponse.access_token);
+      const tokenResponse = await new Promise<{ access_token: string }>((resolve, reject) => {
+        try {
+          const client = window.google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: 'openid email profile',
+            callback: (response: any) => {
+              if (response && response.access_token) {
+                resolve({ access_token: response.access_token });
+              } else {
+                reject(new Error('Google access token olinmadi'));
+              }
+            },
+            error_callback: (error: any) => {
+              reject(new Error('Google autentifikatsiyada xatolik yuz berdi'));
+            }
+          });
+          client.requestAccessToken();
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      const authResponse = await apiService.googleAuth(tokenResponse.access_token);
+      
+      if (!authResponse || !authResponse.token) {
+        throw new Error('Serverdan noto\'g\'ri javob qaytardi');
+      }
+
+      apiService.setAuthToken(authResponse.token);
+      localStorage.setItem('token', authResponse.token);
+      localStorage.setItem('isLoggedIn', 'true');
 
       const userProfile = await apiService.getUserProfile();
       const roleLower: 'teacher' | 'student' = (userProfile.profile.role === 'teacher') ? 'teacher' : 'student';
@@ -124,7 +146,6 @@ function Login({ onLogin, onSwitch }: LoginProps) {
       const avatarUrl = avatarPath ? (avatarPath.startsWith('http') ? avatarPath : `${API_BASE_URL}${avatarPath}`) : '';
 
       localStorage.setItem('userType', roleDisplay);
-      localStorage.setItem('isLoggedIn', 'true');
       localStorage.setItem('userData', JSON.stringify({
         username: userProfile.username,
         email: userProfile.email,
