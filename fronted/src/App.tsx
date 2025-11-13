@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import Login from './components/Login'
-import StudentPanel from './components/StudentPanel'
-import TeacherPanel from './components/TeacherPanel'
+import StudentPanel from './components/student/StudentPanel'
+import TeacherPanel from './components/teacher/TeacherPanel'
 import './App.css'
 import Signup from './components/Signup'
 import apiService from './services/api'
@@ -10,7 +10,6 @@ type AppState = 'login' | 'signup' | 'student' | 'teacher';
 
 function App() {
   const [appState, setAppState] = useState<AppState>('login');
-  const [userType, setUserType] = useState<'teacher' | 'student'>('student');
 
   useEffect(() => {
     // Avtomatik login tekshirish va aktual rolni backenddan olish
@@ -20,10 +19,8 @@ function App() {
         try {
           const profile = await apiService.getUserProfile();
           const roleLower: 'teacher' | 'student' = (profile.profile.role === 'teacher') ? 'teacher' : 'student';
-          const roleDisplay = roleLower === 'teacher' ? 'Teacher' : 'Student';
           // Store capitalized for UI, use lowercase internally for routing
-          localStorage.setItem('userType', roleDisplay);
-          setUserType(roleLower);
+          localStorage.setItem('userType', roleLower === 'teacher' ? 'Teacher' : 'Student');
           setAppState(roleLower);
         } catch {
           setAppState('login');
@@ -33,7 +30,6 @@ function App() {
   }, []);
 
   const handleLogin = (type: 'teacher' | 'student') => {
-    setUserType(type);
     setAppState(type);
   };
 
