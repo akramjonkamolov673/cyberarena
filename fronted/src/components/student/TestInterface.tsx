@@ -10,11 +10,11 @@ interface UserData {
   groupName?: string | null;
 }
 
-interface AnswerProps {
+interface TestInterfaceProps {
   onLogout: () => void;
 }
 
-export default function Answer({ onLogout }: AnswerProps) {
+export default function TestInterface({ onLogout }: TestInterfaceProps) {
   const navigate = useNavigate();
   const { testId } = useParams<{ testId: string }>();
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -23,33 +23,36 @@ export default function Answer({ onLogout }: AnswerProps) {
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<number, number>>({});
 
+  // LOAD TEST DATA
   useEffect(() => {
     const loadTestData = async () => {
       const data = localStorage.getItem("userData");
       if (data) setUserData(JSON.parse(data));
 
       if (!testId) {
-        console.error('No test ID provided');
+        console.error('Test ID mavjud emas');
         navigate('/student');
         return;
       }
 
       try {
-        console.log(`Fetching test with ID: ${testId}...`);
+        console.log(`Test yuklanmoqda ID: ${testId}...`);
         const test = await apiService.getTestSetDetails(parseInt(testId));
-        console.log('Test data received:', test);
+        console.log('Test ma\'lumotlari:', test);
         
         if (!test) {
-          console.error('Test not found');
+          console.error('Test topilmadi');
           navigate('/student');
           return;
         }
 
         setCurrentTest(test);
         
+        // Savollarni yuklash
         if (test.questions) {
           setQuestions(test.questions);
         } else if (test.tests) {
+          // Testlarni savollar formatiga o'tkazish
           const formattedQuestions = test.tests.map(t => ({
             id: t.id,
             text: t.text,
@@ -61,7 +64,7 @@ export default function Answer({ onLogout }: AnswerProps) {
           setQuestions([]);
         }
       } catch (error) {
-        console.error('Error loading test data:', error);
+        console.error('Test yuklanmadi:', error);
         navigate('/student');
       } finally {
         setLoading(false);
@@ -79,6 +82,7 @@ export default function Answer({ onLogout }: AnswerProps) {
   };
 
   const handleSubmit = () => {
+    // Ballarni hisoblash
     let score = 0;
     questions.forEach((question, index) => {
       if (question.correct_answer === answers[index]) {
@@ -86,8 +90,10 @@ export default function Answer({ onLogout }: AnswerProps) {
       }
     });
     
+    // Natijalarni ko'rsatish
     alert(`Test yakunlandi! Siz ${score} ta savoldan ${questions.length} tasiga to'g'ri javob berdingiz.`);
     
+    // Testlar ro'yxatiga qaytish
     navigate('/student');
   };
 

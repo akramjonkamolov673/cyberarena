@@ -74,14 +74,19 @@ export interface Question {
 }
 
 export interface TestSet {
-  id?: number;
+  id: number;
   title: string;
   description: string;
-  start_date: string;
-  end_date: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  is_private: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  created_at: string;
+  created_by: number;
+  updated_at?: string;
   questions?: Question[];
   tests?: Array<{
-    id?: number | null;
+    id?: number;
     text: string;
     options: Array<{
       id: number;
@@ -90,12 +95,8 @@ export interface TestSet {
     }>;
     correct_answer: number | null;
   }>;
-  difficulty?: 'easy' | 'medium' | 'hard';
-  is_private?: boolean;
-  start_time?: string;
-  end_time?: string;
-  created_at?: string;
-  updated_at?: string;
+  allowed_groups: any[]; 
+  assigned_users: any[];  
 }
 
 export interface Group {
@@ -189,8 +190,8 @@ class ApiService {
   }
 
   public async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
-    const method = (options.method || "GET").toUpperCase();
+    const url = endpoint.startsWith('http') ? endpoint : `${this.baseUrl}${endpoint}`;
+    const method = (options.method || 'GET').toUpperCase();
 
     // Get token from localStorage if not set
     if (!this.authToken) {
@@ -206,51 +207,56 @@ class ApiService {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
 
-    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-      const csrf = this.getCookie("csrftoken");
-      if (csrf) headers["X-CSRFToken"] = csrf;
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      const csrf = this.getCookie('csrftoken');
+      if (csrf) headers['X-CSRFToken'] = csrf;
     }
 
-    const doFetch = async () => {
-      return await fetch(url, {
+    try {
+      const response = await fetch(url, {
         ...options,
         headers,
-        credentials: "include",
+        credentials: 'include',
       });
-    };
 
-    let response = await doFetch();
-
-    // If unauthorized, try refresh flow once
-    if (response.status === 401) {
-      const refreshed = await this.refreshToken();
-      if (refreshed) {
-        // update Authorization header with new token
-        if (!this.authToken) this.authToken = localStorage.getItem('token');
-        if (this.authToken) headers['Authorization'] = `Bearer ${this.authToken}`;
-
-        // retry original request (body is reused from options)
-        response = await fetch(url, {
-          ...options,
-          headers,
-          credentials: "include",
-        });
-      } else {
-        // couldn't refresh -> force logout
+      // If unauthorized, try refresh flow once
+      if (response.status === 401) {
+        const refreshed = await this.refreshToken();
+        if (refreshed) {
+          // Update token and retry the request
+          this.authToken = localStorage.getItem('token');
+          if (this.authToken) {
+            headers['Authorization'] = `Bearer ${this.authToken}`;
+            const retryResponse = await fetch(url, {
+              ...options,
+              headers,
+              credentials: 'include',
+            });
+            return this.handleResponse<T>(retryResponse);
+          }
+        }
+        // If we get here, refresh failed
         console.error('Failed to refresh token');
         localStorage.removeItem('token');
         window.location.href = '/login';
-        throw new Error("Sessiya tugadi. Qayta kiring.");
+        throw new Error('Sessiya tugadi. Qayta kiring.');
       }
-    }
 
+      return this.handleResponse<T>(response);
+    } catch (error) {
+      console.error('API request failed:', error);
+      throw error;
+    }
+  }
+
+  private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
+      const text = await response.text().catch(() => '');
       let msg = `HTTP ${response.status}`;
 
       try {
         const err = text ? JSON.parse(text) : {};
-        msg = err.detail || err.error || JSON.stringify(err) || msg;
+        msg = err.detail || err.message || err.error || JSON.stringify(err) || msg;
       } catch {
         msg = text || msg;
       }
@@ -259,9 +265,23 @@ class ApiService {
     }
 
     if (response.status === 204) return {} as T;
-    // try to parse JSON, but guard against empty responses
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch(() => '');
     return text ? JSON.parse(text) as T : ({} as T);
+  }
+
+  // Generic HTTP GET request
+  async get<T = any>(endpoint: string, params: Record<string, any> = {}): Promise<T> {
+    const query = new URLSearchParams(params).toString();
+    const url = query ? `${endpoint}?${query}` : endpoint;
+    return this.request<T>(url, { method: 'GET' });
+  }
+
+  // Generic HTTP PATCH request
+  async patch<T = any>(endpoint: string, data: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
   }
 
   // ===================== TEST SUBMISSIONS =====================
@@ -405,6 +425,7 @@ class ApiService {
     try {
       return await this.request<TestSet[]>("/api/tests/");
     } catch (error) {
+      console.error('Error fetching test sets:', error);
       throw error;
     }
   }

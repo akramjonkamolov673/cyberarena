@@ -3,6 +3,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from django.db import models
 from django.db.models import Q
 from .models import TestSet, CodingChallenge, CodeSubmission, TestSubmission, ChallengeGroup
+from .permissions import IsTeacher
 from .serializers import (
     TestSetSerializer,
     CodingChallengeSerializer,
@@ -68,10 +69,12 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 
 class CodeSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = CodeSubmissionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
 
     def get_queryset(self):
         user = self.request.user
+        if user.is_staff:
+            return CodeSubmission.objects.all()
         return CodeSubmission.objects.filter(
             Q(user=user) | Q(challenge__created_by=user)
         ).distinct()
@@ -82,10 +85,12 @@ class CodeSubmissionViewSet(viewsets.ModelViewSet):
 
 class TestSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = TestSubmissionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
 
     def get_queryset(self):
         user = self.request.user
+        if user.is_staff:
+            return TestSubmission.objects.all()
         return TestSubmission.objects.filter(
             Q(user=user) | Q(test__created_by=user)
         ).distinct()

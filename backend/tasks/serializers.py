@@ -1,5 +1,14 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
 from .models import TestSet, CodingChallenge, CodeSubmission, TestSubmission, ChallengeGroup
+
+User = get_user_model()
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'email']
 
 
 class TestSetSerializer(serializers.ModelSerializer):
@@ -19,10 +28,18 @@ class CodingChallengeSerializer(serializers.ModelSerializer):
 
 
 class CodeSubmissionSerializer(serializers.ModelSerializer):
+    meta = serializers.JSONField(required=False, default=dict)
+    
     class Meta:
         model = CodeSubmission
         fields = '__all__'
         read_only_fields = ['user', 'submitted_at']
+    
+    def create(self, validated_data):
+        # Ensure meta is always a dictionary
+        if 'meta' not in validated_data or validated_data['meta'] is None:
+            validated_data['meta'] = {}
+        return super().create(validated_data)
 
 
 class TestSubmissionSerializer(serializers.ModelSerializer):
@@ -32,6 +49,7 @@ class TestSubmissionSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
+    user = UserSerializer(read_only=True)
     
     class Meta:
         model = TestSubmission

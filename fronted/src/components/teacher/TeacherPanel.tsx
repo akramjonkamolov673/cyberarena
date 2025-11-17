@@ -19,7 +19,7 @@ interface TeacherPanelProps {
   onLogout: () => void;
 }
 
-type TabType = 'questions' | 'codeChallenge' | 'codeBattle';
+type TabType = 'questions' | 'codeChallenge' | 'codeBattle' | 'reviews';
 
 function TeacherPanel({ onLogout }: TeacherPanelProps) {
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -28,15 +28,20 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
   
   // Import ChallengeGroupPage dynamically to avoid circular dependencies
   const [ChallengeGroupPage, setChallengeGroupPage] = useState<React.ComponentType | null>(null);
+  const [ReviewPage, setReviewPage] = useState<React.ComponentType | null>(null);
   
   useEffect(() => {
-    // Dynamically import ChallengeGroupPage when needed
+    // Dynamically import components when needed
     if (activeTab === 'codeBattle' && !ChallengeGroupPage) {
       import('./ChallengeGroupPage').then(module => {
         setChallengeGroupPage(() => module.default);
       });
+    } else if (activeTab === 'reviews' && !ReviewPage) {
+      import('./review/Review').then(module => {
+        setReviewPage(() => module.default);
+      });
     }
-  }, [activeTab, ChallengeGroupPage]);
+  }, [activeTab, ChallengeGroupPage, ReviewPage]);
 
   useEffect(() => {
     loadUserData();
@@ -111,6 +116,8 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
         return ChallengeGroupPage ? <ChallengeGroupPage /> : <div>Loading CodeBattle...</div>;
       case 'codeChallenge':
         return <CodeChallenge />;
+      case 'reviews':
+        return ReviewPage ? <ReviewPage /> : <div>Loading Javoblar...</div>;
       case 'questions':
       default:
         return <QuestionManager />;
@@ -141,6 +148,12 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
             onClick={() => setActiveTab('codeBattle')}
           >
             CodeBattle
+          </button>
+          <button 
+            className={`nav-link ${activeTab === 'reviews' ? 'active' : ''}`}
+            onClick={() => setActiveTab('reviews')}
+          >
+            Javoblar
           </button>
           <button className="nav-button" onClick={handleLogout}>
             <i className="fas fa-sign-out-alt"></i> Chiqish

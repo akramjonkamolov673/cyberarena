@@ -3,7 +3,10 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './components/Login'
 import StudentPanel from './components/student/StudentPanel'
 import TeacherPanel from './components/teacher/TeacherPanel'
-import Answer from './components/student/Answer';
+import TestInterface from './components/student/TestInterface';
+import CodeTrainList from "./components/student/codetrain/CodeTrainList";
+import CodeTrainProblem from "./components/student/codetrain/CodeTrainProblem";
+import QuestionsList from "./components/student/QuestionsList";
 import './App.css'
 import Signup from './components/Signup'
 import apiService from './services/api'
@@ -52,6 +55,35 @@ function App() {
   return (
     <Router>
       <Routes>
+        {/* Auth Routes */}
+        <Route path="/login" element={
+          <Login onLogin={handleLogin} onSwitch={() => setAppState('signup')} />
+        } />
+        
+        <Route path="/signup" element={
+          <Signup onLogin={handleLogin} onSwitch={() => setAppState('login')} />
+        } />
+        
+        {/* Student Routes */}
+        <Route path="/student" element={
+          appState === 'student' ? 
+            <StudentPanel onLogout={handleLogout} /> : 
+            <Login onLogin={handleLogin} onSwitch={() => setAppState('signup')} />
+        }>
+          <Route index element={<QuestionsList />} />
+          <Route path="test/:testId" element={<TestInterface onLogout={handleLogout} />} />
+          <Route path="codetrain" element={<CodeTrainList />} />
+          <Route path="codetrain/:id" element={<CodeTrainProblem />} />
+        </Route>
+
+        {/* Teacher Routes */}
+        <Route path="/teacher/*" element={
+          appState === 'teacher' ? 
+            <TeacherPanel onLogout={handleLogout} /> : 
+            <Login onLogin={handleLogin} onSwitch={() => setAppState('signup')} />
+        } />
+        
+        {/* Root Route - Redirect based on auth state */}
         <Route path="/" element={
           appState === 'login' ? 
             <Login onLogin={handleLogin} onSwitch={() => setAppState('signup')} /> :
@@ -61,26 +93,20 @@ function App() {
                 <StudentPanel onLogout={handleLogout} /> :
                 <TeacherPanel onLogout={handleLogout} />
         } />
-        <Route path="/login" element={
-          <Login onLogin={handleLogin} onSwitch={() => setAppState('signup')} />
-        } />
-        <Route path="/signup" element={
-          <Signup onLogin={handleLogin} onSwitch={() => setAppState('login')} />
-        } />
-        <Route path="/student" element={
-          appState === 'student' ? 
-            <StudentPanel onLogout={handleLogout} /> : 
-            <Login onLogin={handleLogin} onSwitch={() => setAppState('signup')} />
-        } />
-        <Route path="/teacher" element={
-          appState === 'teacher' ? 
-            <TeacherPanel onLogout={handleLogout} /> : 
-            <Login onLogin={handleLogin} onSwitch={() => setAppState('signup')} />
-        } />
-        <Route path="/answer/:questionId" element={
-          localStorage.getItem('isLoggedIn') === 'true' ?
-            <Answer /> :
-            <Login onLogin={handleLogin} onSwitch={() => setAppState('signup')} />
+        
+        {/* Catch-all route */}
+        <Route path="*" element={
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-red-600 mb-4">404 - Sahifa topilmadi</h1>
+              <button 
+                onClick={() => window.location.href = '/'}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Bosh sahifaga qaytish
+              </button>
+            </div>
+          </div>
         } />
       </Routes>
     </Router>

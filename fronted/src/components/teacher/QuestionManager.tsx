@@ -20,8 +20,8 @@ type BlockLocal = {
   id: number;
   title: string;
   description?: string;
-  start_date?: string;
-  end_date?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   questions: QuestionLocal[]; // normalized name
 };
 
@@ -88,8 +88,8 @@ const QuestionManager: React.FC = () => {
           id: t.id!,
           title: t.title || '',
           description: t.description || '',
-          start_date: t.start_date || '',
-          end_date: t.end_date || '',
+          start_time: t.start_time || null,
+          end_time: t.end_time || null,
           questions: (t.questions || (t.tests as any) || []).map((q: APIQuestion) => normalizeQuestion(q)),
         }));
 
@@ -112,8 +112,8 @@ const QuestionManager: React.FC = () => {
         id: res.id!,
         title: res.title || '',
         description: res.description || '',
-        start_date: res.start_date || '',
-        end_date: res.end_date || '',
+        start_time: res.start_time || null,
+        end_time: res.end_time || null,
         questions: (res.questions || (res.tests as any) || []).map((q: APIQuestion) => normalizeQuestion(q)),
       };
       setBlocks((prev) => prev.map((b) => (b.id === blockId ? updated : b)));
@@ -255,8 +255,9 @@ const QuestionManager: React.FC = () => {
     // open a modal in your app if you want; for brevity we just reuse the browser prompt
     const title = window.prompt('Blok nomini kiriting', block.title);
     if (!title) return;
-    apiService.updateTestSet(block.id, { title, description: block.description, start_date: block.start_date, end_date: block.end_date })
-      .then(() => refreshBlock(block.id))
+    const { id, title: newTitle, description, start_time, end_time } = block;
+    apiService.updateTestSet(id, { title: newTitle, description, start_time, end_time })
+      .then(() => refreshBlock(id))
       .catch((e: any) => { console.error(e); setError('Blokni yangilashda xato'); });
   };
 
@@ -313,7 +314,10 @@ const QuestionManager: React.FC = () => {
               <div>
                 <h3 className="text-xl font-semibold text-blue-700 mb-1">{block.title}</h3>
                 <p className="text-slate-600 mb-2">{block.description}</p>
-                <p className="text-sm text-slate-500 mb-2">{block.start_date} – {block.end_date}</p>
+                <p className="text-sm text-slate-500 mb-2">
+                  {block.start_time ? new Date(block.start_time).toLocaleString() : 'Muddati yo\'q'} – 
+                  {block.end_time ? new Date(block.end_time).toLocaleString() : 'Muddati yo\'q'}
+                </p>
 
                 <div className="mt-4">
                   <h4 className="font-medium text-slate-700 mb-2">Savollar:</h4>

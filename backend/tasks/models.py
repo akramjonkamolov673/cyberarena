@@ -114,6 +114,7 @@ class CodeSubmission(models.Model):
     passed_count = models.PositiveIntegerField(default=0)
     total_tests = models.PositiveIntegerField(default=0)
     submitted_at = models.DateTimeField(default=timezone.now)
+    meta = models.JSONField(default=dict, blank=True, null=True)  # Add meta field with default
 
     class Meta:
         unique_together = ("user", "challenge")
