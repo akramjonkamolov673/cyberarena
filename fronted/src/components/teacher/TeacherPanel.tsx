@@ -89,6 +89,16 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
     }
   };
 
+  const getTabButtonClasses = (tab: TabType) => {
+    const base =
+      'rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2';
+    const active =
+      'bg-gradient-to-r from-blue-900 to-blue-600 text-white shadow-lg shadow-blue-900/30 border-blue-700';
+    const inactive = 'text-slate-600 border-transparent hover:border-blue-200 hover:bg-blue-50';
+
+    return `${base} ${activeTab === tab ? active : inactive}`;
+  };
+
   if (loading) {
     return (
       <div className="loading">
@@ -125,56 +135,55 @@ function TeacherPanel({ onLogout }: TeacherPanelProps) {
   };
 
   return (
-    <div className="teacher-panel">
-      <header className="navbar">
-        <div className="navbar-brand">
-          <h1>O'qituvchi paneli</h1>
-        </div>
-        <nav className="nav-links">
-          <button 
-            className={`nav-link ${activeTab === 'questions' ? 'active' : ''}`}
-            onClick={() => setActiveTab('questions')}
-          >
-            Savollar
-          </button>
-          <button 
-            className={`nav-link ${activeTab === 'codeChallenge' ? 'active' : ''}`}
-            onClick={() => setActiveTab('codeChallenge')}
-          >
-            CodeTrain
-          </button>
-          <button 
-            className={`nav-link ${activeTab === 'codeBattle' ? 'active' : ''}`}
-            onClick={() => setActiveTab('codeBattle')}
-          >
-            CodeBattle
-          </button>
-          <button 
-            className={`nav-link ${activeTab === 'reviews' ? 'active' : ''}`}
-            onClick={() => setActiveTab('reviews')}
-          >
-            Javoblar
-          </button>
-          <button className="nav-button" onClick={handleLogout}>
-            <i className="fas fa-sign-out-alt"></i> Chiqish
-          </button>
-        </nav>
-        <div className="user-menu">
-          <div 
-            className="user-avatar"
-          >
-            <img 
-              src={userData?.profileImage || '/default-avatar.png'} 
-              alt={userData?.firstName || 'Foydalanuvchi'} 
-            />
-            <span>{userData?.firstName || 'Foydalanuvchi'}</span>
+    <div className="min-h-screen bg-slate-50">
+      <header className="sticky top-0 z-50 border-b-4 border-blue-900 bg-white shadow-lg">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-900 to-blue-600 text-2xl">
+              👨‍🏫
+            </div>
+            <div>
+              <p className="text-lg font-bold text-blue-900">O'qituvchi paneli</p>
+              <p className="text-sm text-slate-500">Darslarni boshqarish va kuzatish</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <nav className="flex flex-wrap items-center gap-2">
+              <button className={getTabButtonClasses('questions')} onClick={() => setActiveTab('questions')}>
+                Savollar
+              </button>
+              <button className={getTabButtonClasses('codeChallenge')} onClick={() => setActiveTab('codeChallenge')}>
+                CodeTrain
+              </button>
+              <button className={getTabButtonClasses('codeBattle')} onClick={() => setActiveTab('codeBattle')}>
+                CodeBattle
+              </button>
+              <button className={getTabButtonClasses('reviews')} onClick={() => setActiveTab('reviews')}>
+                Javoblar
+              </button>
+            </nav>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1">
+                <img
+                  className="h-10 w-10 rounded-full border border-white object-cover shadow-sm"
+                  src={userData?.profileImage || '/default-avatar.png'}
+                  alt={userData?.firstName || 'Foydalanuvchi'}
+                />
+                <span className="text-sm font-semibold text-blue-900">{userData?.firstName || 'Foydalanuvchi'}</span>
+              </div>
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                onClick={handleLogout}
+              >
+                <i className="fas fa-sign-out-alt" /> Chiqish
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="panel-content">
-        {renderContent()}
-      </main>
+      <main className="mx-auto max-w-6xl px-6 py-8">{renderContent()}</main>
     </div>
   );
 }

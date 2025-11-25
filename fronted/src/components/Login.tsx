@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import './Login.css';
 import logoImage from '../logo/logo.png';
 import apiService, { API_BASE_URL } from '../services/api';
@@ -13,6 +13,7 @@ function Login({ onLogin, onSwitch }: LoginProps) {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const githubAuthProcessed = useRef(false);
 
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID as string | undefined;
@@ -54,7 +55,14 @@ function Login({ onLogin, onSwitch }: LoginProps) {
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
     if (!code) return;
+    
+    // Prevent multiple executions with a flag
+    let isProcessing = false;
+    
     const run = async () => {
+      if (isProcessing) return;
+      isProcessing = true;
+      
       try {
         setIsLoading(true);
         await apiService.githubAuth(code);
@@ -73,17 +81,26 @@ function Login({ onLogin, onSwitch }: LoginProps) {
           groupId: userProfile.profile.group ?? null,
           profileImage: avatarUrl,
         }));
+        
+        // Remove code from URL to prevent re-processing
         url.searchParams.delete('code');
-        window.history.replaceState({}, document.title, url.toString());
+        const newUrl = url.pathname + (url.search ? url.search : '') + (url.hash ? url.hash : '');
+        window.history.replaceState({}, document.title, newUrl || '/');
+        
         onLogin(roleLower);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'GitHub orqali kirishda xatolik');
+        // Remove code even on error to prevent retry loops
+        url.searchParams.delete('code');
+        const newUrl = url.pathname + (url.search ? url.search : '') + (url.hash ? url.hash : '');
+        window.history.replaceState({}, document.title, newUrl || '/');
       } finally {
         setIsLoading(false);
+        isProcessing = false;
       }
     };
     run();
-  }, []);
+  }, [onLogin]);
 
   const handleGoogleLogin = async () => {
     setError('');

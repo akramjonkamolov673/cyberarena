@@ -20,17 +20,28 @@ function App() {
     // Avtomatik login tekshirish va aktual rolni backenddan olish
     const isLoggedIn = localStorage.getItem('isLoggedIn');
     if (isLoggedIn === 'true') {
+      let isMounted = true;
       (async () => {
         try {
           const profile = await apiService.getUserProfile();
+          if (!isMounted) return;
           const roleLower: 'teacher' | 'student' = (profile.profile.role === 'teacher') ? 'teacher' : 'student';
           // Store capitalized for UI, use lowercase internally for routing
           localStorage.setItem('userType', roleLower === 'teacher' ? 'Teacher' : 'Student');
           setAppState(roleLower);
-        } catch {
-          setAppState('login');
+        } catch (err) {
+          // Only reset to login if component is still mounted
+          if (isMounted) {
+            localStorage.removeItem('isLoggedIn');
+            localStorage.removeItem('token');
+            setAppState('login');
+          }
         }
       })();
+      
+      return () => {
+        isMounted = false;
+      };
     }
   }, []);
 
@@ -41,8 +52,8 @@ function App() {
     // Store the user type in localStorage for persistence
     localStorage.setItem('userType', type === 'teacher' ? 'Teacher' : 'Student');
     
-    // Force a page reload to ensure all components re-initialize with the new auth state
-    window.location.href = '/';
+    // React Router will handle navigation, no need for page reload
+    // This prevents infinite refresh loops
   };
 
   // setup flow removed
