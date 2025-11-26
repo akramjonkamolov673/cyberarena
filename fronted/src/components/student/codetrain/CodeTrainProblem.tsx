@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../../../services/api.ts";
 import TerminalOutput from "./TerminalOutput.tsx";
 
 type Problem = {
@@ -107,7 +108,7 @@ const CodeTrainProblem: React.FC = () => {
         return;
       }
 
-      const res = await fetch(`http://localhost:8000/api/challenges/${id}/`, {
+      const res = await fetch(`${API_BASE_URL}/api/challenges/${id}/`, {
         credentials: "include",
         headers: {
           "Accept": "application/json",
@@ -173,9 +174,20 @@ const CodeTrainProblem: React.FC = () => {
   }
 
   async function executeCode({ code, stdin }: { code: string; stdin: string }) {
-    const res = await fetch("/api/runner", {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+    if (!token) {
+      setMessage("Siz tizimga kirmagansiz. Iltimos, qayta kiring.");
+      window.location.href = '/login';
+      throw new Error('Auth required');
+    }
+
+    const res = await fetch(`${API_BASE_URL}/api/runner/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
       body: JSON.stringify({
         language: mapLanguage(language),
         source: code,
@@ -251,7 +263,7 @@ const CodeTrainProblem: React.FC = () => {
 
       let res;
       try {
-        res = await fetch("http://localhost:8000/api/submissions/", {
+        res = await fetch(`${API_BASE_URL}/api/submissions/`, {
           method: "POST",
           credentials: "include",
           headers: { 

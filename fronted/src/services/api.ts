@@ -12,6 +12,8 @@ declare global {
 export interface LoginResponse {
   detail?: string;
   token?: string;
+  access?: string;
+  refresh?: string;
   refresh_token?: string;
   user?: {
     username: string;
@@ -175,7 +177,7 @@ class ApiService {
 
       if (!resp.ok) return false;
       const data = await resp.json().catch(() => ({}));
-      const newToken = data.access || data.token || data.detail && null;
+      const newToken = data.access || data.token;
 
       if (newToken) {
         this.setAuthToken(newToken);
@@ -328,8 +330,9 @@ class ApiService {
       body: JSON.stringify(data)
     });
 
-    if (response.token) {
-      this.setAuthToken(response.token);
+    const accessToken = response.access || response.token;
+    if (accessToken) {
+      this.setAuthToken(accessToken);
       localStorage.setItem('isLoggedIn', 'true');
     }
 
@@ -369,7 +372,7 @@ class ApiService {
   }
 
   async githubAuth(code: string): Promise<LoginResponse> {
-    const response = await this.request<LoginResponse>('/api/social-auth/github/', {
+    const response = await this.request<LoginResponse>('/api/users/auth/github/', {
       method: 'POST',
       body: JSON.stringify({
         code,
@@ -377,8 +380,9 @@ class ApiService {
       })
     });
 
-    if (response.token) {
-      this.setAuthToken(response.token);
+    const accessToken = response.access || response.token;
+    if (accessToken) {
+      this.setAuthToken(accessToken);
       localStorage.setItem('isLoggedIn', 'true');
     }
 

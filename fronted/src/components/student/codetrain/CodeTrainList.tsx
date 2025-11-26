@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ProblemCard from "./ProblemCard.tsx";
+import apiService from "../../../services/api";
 
 type ProblemSummary = {
   id: number;
@@ -16,68 +17,39 @@ const CodeTrainList: React.FC = () => {
   const [query, setQuery] = useState<string>("");
 
   useEffect(() => {
+    console.log('CodeTrainList mounted');
     fetchProblems();
   }, []);
 
   async function fetchProblems() {
     try {
-      console.log('Fetching problems from API...');
-      const apiUrl = 'http://localhost:8000/api/challenges/';
-      console.log('API URL:', apiUrl);
-      
-      // LocalStorage'dan token olish
-      const token = localStorage.getItem('token') || localStorage.getItem('access_token');
-      
-      if (!token) {
-        console.error('Token topilmadi. Iltimos, qaytadan tizimga kiring.');
-        window.location.href = '/login';
-        return;
-      }
-      
-      console.log('Token topildi:', token.substring(0, 10) + '...');
-      
-      const res = await fetch(apiUrl, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-      });
-      
-      console.log('Response status:', res.status, res.statusText);
-      
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('API Error Response:', errorText);
-        throw new Error(`HTTP error! status: ${res.status} - ${res.statusText}\n${errorText}`);
-      }
-      
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await res.text();
-        console.error('Expected JSON but got:', contentType, '\nResponse:', text);
-        throw new Error(`Expected JSON but got ${contentType}`);
-      }
-      
-      const data = await res.json();
-      console.log('API Response:', data);
-      
-      // Map the API response to match the ProblemSummary type
-      const mappedData = data.map((item: any) => ({
+      // Unified API call (handles auth, refresh, errors)
+      console.log('fetchProblems: requesting challenges...');
+      const data: any = await apiService.getChallenges();
+      console.log('fetchProblems: raw data =', data);
+
+      // Support both array and paginated objects { results: [...] }
+      const items: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray((data as any)?.results)
+          ? (data as any).results
+          : [];
+      console.log('fetchProblems: items length =', items.length);
+
+      const mappedData = items.map((item: any) => ({
         id: item.id,
         title: item.title,
         short_description: item.description || '',
         difficulty: item.difficulty || 'Medium',
         tags: item.tags || [],
-        visible: !item.is_private
+        visible: item.is_private === undefined ? true : !item.is_private,
       }));
-      
+
+      console.log('fetchProblems: mappedData length =', mappedData.length, 'sample =', mappedData[0]);
       setProblems(mappedData);
     } catch (e) {
-      console.error("Failed to fetch problems:", e);
-      // Xatolikni foydalanuvchiga ko'rsatish uchun state o'zgartirish
-      // setError(e.message); // Agar error state bo'lsa
+      console.error('Failed to fetch problems via apiService:', e);
+      setProblems([]);
     }
   }
 

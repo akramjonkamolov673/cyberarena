@@ -10,9 +10,26 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='testsubmission',
-            name='meta',
-            field=models.JSONField(blank=True, default=dict, null=True),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunSQL(
+                    sql=(
+                        "ALTER TABLE tasks_testsubmission "
+                        "ADD COLUMN IF NOT EXISTS meta jsonb "
+                        "DEFAULT '{}'::jsonb"
+                    ),
+                    reverse_sql=(
+                        "ALTER TABLE tasks_testsubmission "
+                        "DROP COLUMN IF EXISTS meta"
+                    ),
+                ),
+            ],
+            state_operations=[
+                migrations.AddField(
+                    model_name='testsubmission',
+                    name='meta',
+                    field=models.JSONField(blank=True, default=dict, null=True),
+                ),
+            ],
         ),
     ]

@@ -1,13 +1,24 @@
-from rest_framework import generics, permissions, status, views
+from typing import Optional
+
+import requests
+from django.conf import settings
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
 from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from rest_framework import generics, permissions, status, views
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth.models import User
-from .models import UserProfile, Group
-from .serializers import RegisterSerializer, UserFullSerializer, GroupSerializer, EmailOrUsernameTokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+from accounts.models import UserProfile, Group
+from .serializers import (
+    RegisterSerializer,
+    UserFullSerializer,
+    GroupSerializer,
+    EmailOrUsernameTokenObtainPairSerializer,
+)
 
 
 # Ro‘yxatdan o‘tish
@@ -41,9 +52,12 @@ class RegisterView(generics.CreateAPIView):
         user = serializer.save()
 
         refresh = RefreshToken.for_user(user)
-        return Response({
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+        resp = Response({
+            "refresh": refresh_token,
+            "access": access_token,
+            "token": access_token,
             "user": {
                 "username": user.username,
                 "email": user.email,
@@ -51,6 +65,8 @@ class RegisterView(generics.CreateAPIView):
                 "last_name": user.last_name,
             }
         })
+        _set_jwt_cookies(resp, access_token, refresh_token)
+        return resp
 
 
 # Login (JWT)
@@ -63,24 +79,25 @@ class TokenRefreshAllowAny(TokenRefreshView):
     permission_classes = [permissions.AllowAny]
 
 
-# --- Cookie-based JWT auth ---
-from django.contrib.auth import authenticate
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-
-
-def _set_jwt_cookies(resp: Response, access: str, refresh: str):
+def _cookie_attrs():
     secure_flag = not settings.DEBUG
     samesite_val = 'Strict' if secure_flag else 'Lax'
+    access_max_age = getattr(settings, 'ACCESS_COOKIE_MAX_AGE', 60 * 10)
+    refresh_max_age = getattr(settings, 'REFRESH_COOKIE_MAX_AGE', 60 * 60 * 24 * 7)
+    return secure_flag, samesite_val, access_max_age, refresh_max_age
+
+
+def _set_jwt_cookies(resp: Response, access: str, refresh: Optional[str] = None):
+    secure_flag, samesite_val, access_max_age, refresh_max_age = _cookie_attrs()
     resp.set_cookie(
         'access', access,
-        max_age=60*10, httponly=True, secure=secure_flag, samesite=samesite_val, path='/'
+        max_age=access_max_age, httponly=True, secure=secure_flag, samesite=samesite_val, path='/'
     )
-    resp.set_cookie(
-        'refresh', refresh,
-        max_age=60*60*24*7, httponly=True, secure=secure_flag, samesite=samesite_val, path='/api/users/refresh/'
-    )
+    if refresh:
+        resp.set_cookie(
+            'refresh', refresh,
+            max_age=refresh_max_age, httponly=True, secure=secure_flag, samesite=samesite_val, path='/api/users/refresh/'
+        )
 
 
 def _clear_jwt_cookies(resp: Response):
@@ -109,8 +126,25 @@ class CookieLoginView(views.APIView):
         if not user:
             return Response({'detail': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
         refresh = RefreshToken.for_user(user)
-        resp = Response({'detail': 'ok'}, status=status.HTTP_200_OK)
-        _set_jwt_cookies(resp, str(refresh.access_token), str(refresh))
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+        user_payload = {
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        }
+        resp = Response(
+            {
+                'detail': 'ok',
+                'access': access_token,
+                'refresh': refresh_token,
+                'token': access_token,
+                'user': user_payload,
+            },
+            status=status.HTTP_200_OK,
+        )
+        _set_jwt_cookies(resp, access_token, refresh_token)
         return resp
 
 
@@ -127,8 +161,8 @@ class CookieRefreshView(views.APIView):
             new_access = str(token.access_token)
         except Exception:
             return Response({'detail': 'Invalid refresh'}, status=status.HTTP_401_UNAUTHORIZED)
-        resp = Response({'detail': 'refreshed'}, status=status.HTTP_200_OK)
-        resp.set_cookie('access', new_access, max_age=60*10, httponly=True, secure=True, samesite='Strict', path='/')
+        resp = Response({'detail': 'refreshed', 'access': new_access, 'token': new_access}, status=status.HTTP_200_OK)
+        _set_jwt_cookies(resp, new_access, refresh_cookie)
         return resp
 
 
@@ -198,14 +232,6 @@ class UserProfileUpdateView(generics.UpdateAPIView):
         
         serializer = self.get_serializer(user)
         return Response(serializer.data)
-
-import requests
-from django.conf import settings
-from rest_framework.response import Response
-from django.contrib.auth.models import User
-from rest_framework_simplejwt.tokens import RefreshToken
-from accounts.models import UserProfile, Group
-
 
 @method_decorator(csrf_exempt, name='dispatch')
 class GoogleAuthView(views.APIView):
@@ -379,9 +405,12 @@ class GithubAuthView(views.APIView):
 
         # JWT token
         refresh = RefreshToken.for_user(user)
-        return Response({
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+        resp = Response({
+            "refresh": refresh_token,
+            "access": access_token,
+            "token": access_token,
             "user": {
                 "username": user.username,
                 "email": user.email,
@@ -389,6 +418,8 @@ class GithubAuthView(views.APIView):
                 "last_name": user.last_name,
             }
         })
+        _set_jwt_cookies(resp, access_token, refresh_token)
+        return resp
 
 
 class GroupListView(generics.ListAPIView):

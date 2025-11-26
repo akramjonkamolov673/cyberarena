@@ -15,6 +15,7 @@ router.register(r'test-submissions', TestSubmissionViewSet, basename='testsubmis
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/users/', include('accounts.urls')),
+    path('api/', include('tasks.urls')),
     path('api/', include(router.urls)),
 ]
 

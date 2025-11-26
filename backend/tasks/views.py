@@ -1,7 +1,12 @@
-from rest_framework import viewsets, permissions
-from rest_framework.throttling import ScopedRateThrottle
+import requests
+from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models import Q
+from rest_framework import permissions, status, viewsets
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from .models import TestSet, CodingChallenge, CodeSubmission, TestSubmission, ChallengeGroup
 from .permissions import IsTeacher
 from .serializers import (
@@ -18,6 +23,20 @@ class IsCreatorOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         return getattr(obj, 'created_by_id', None) == getattr(request.user, 'id', None)
+
+
+def _get_user_profile(user):
+    """
+    Return the attached UserProfile if it exists, otherwise None.
+    RelatedObjectDoesNotExist inherits from ObjectDoesNotExist, so we catch that
+    to avoid 500s when a user hasn't completed profile setup yet.
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return None
+    try:
+        return user.profile
+    except ObjectDoesNotExist:
+        return None
 
 
 class TestSetViewSet(viewsets.ModelViewSet):
@@ -38,7 +57,8 @@ class ChallengeGroupViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        user_group = getattr(getattr(user, 'profile', None), 'group', None)
+        profile = _get_user_profile(user)
+        user_group = getattr(profile, 'group', None)
         q = models.Q(is_private=False) | models.Q(created_by=user) | models.Q(assigned_users=user)
         if user_group:
             q = q | models.Q(allowed_groups=user_group)
@@ -143,14 +163,16 @@ class CodingChallengeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        user_group = getattr(getattr(user, 'profile', None), 'group', None)
+        profile = _get_user_profile(user)
+        user_group = getattr(profile, 'group', None)
         # Visible challenges:
         # - public
         # - created by user
         # - directly assigned
-        # - allowed by user's group
+        # - allowed by user's group akram aytgandima sani hatoyin dib
         # - challenges included in groups where the user is a member (assigned_users) or allowed_groups includes user's group
-        group_q = models.Q(groups__assigned_users=user)
+        # Challenges in groups visible to everyone if the group itself is public (is_private=False)
+        group_q = models.Q(groups__assigned_users=user) | models.Q(groups__is_private=False)
         if user_group:
             group_q = group_q | models.Q(groups__allowed_groups=user_group)
         q = (
@@ -185,3 +207,89 @@ class CodingChallengeViewSet(viewsets.ModelViewSet):
                 grp.apply_group_rules(instance)
             except ChallengeGroup.DoesNotExist:
                 pass
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([ScopedRateThrottle])
+def run_code(request):
+    """
+    Proxy code execution requests to Piston while keeping the API key server-side.
+    """
+    language = request.data.get('language')
+    source = request.data.get('source')
+    stdin = request.data.get('stdin', '')
+    version = request.data.get('version', '*')
+
+    if not language or not source:
+        return Response(
+            {'detail': 'language va source maydonlari talab qilinadi.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    piston_url = getattr(
+        settings,
+        'PISTON_API_URL',
+        'https://emkc.org/api/v2/piston/execute',
+    )
+    piston_key = getattr(settings, 'PISTON_API_KEY', None)
+
+    payload = {
+        'language': language,
+        'version': version,
+        'files': [{'name': 'Main', 'content': source}],
+        'stdin': stdin,
+        'args': request.data.get('args', []),
+        'compile_timeout': request.data.get('compile_timeout', 10000),
+        'run_timeout': request.data.get('run_timeout', 3000),
+        'compile_memory_limit': request.data.get('compile_memory_limit', -1),
+        'run_memory_limit': request.data.get('run_memory_limit', -1),
+    }
+
+    headers = {'Content-Type': 'application/json'}
+    if piston_key:
+        headers['Authorization'] = f'Bearer {piston_key}'
+
+    try:
+        resp = requests.post(piston_url, json=payload, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.exceptions.Timeout:
+        return Response(
+            {'detail': 'Kod bajarilishi juda uzoq davom etdi.'},
+            status=status.HTTP_504_GATEWAY_TIMEOUT,
+        )
+    except requests.exceptions.HTTPError as exc:
+        return Response(
+            {
+                'detail': 'Piston API xatolik qaytardi.',
+                'status_code': exc.response.status_code if exc.response else None,
+                'response': exc.response.text if exc.response else '',
+            },
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except requests.exceptions.RequestException as exc:
+        return Response(
+            {'detail': 'Piston API bilan bog‘lanib bo‘lmadi.', 'error': str(exc)},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except ValueError:
+        return Response(
+            {'detail': 'Piston API noto‘g‘ri javob qaytardi.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    normalized = {
+        'stdout': data.get('run', {}).get('stdout') or data.get('stdout', ''),
+        'stderr': data.get('run', {}).get('stderr') or data.get('stderr', ''),
+        'output': data.get('run', {}).get('output') or data.get('output', ''),
+        'signal': data.get('run', {}).get('signal'),
+        'language': language,
+        'version': data.get('version', version),
+        'runtime': data.get('run', {}).get('time'),
+    }
+
+    return Response(normalized, status=status.HTTP_200_OK)
+
+
+run_code.throttle_scope = 'code_run'

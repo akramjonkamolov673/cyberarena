@@ -114,15 +114,22 @@ REST_FRAMEWORK = {
         'user': '1000/day',
         'anon': '100/day',
         'challenge_create': '5/min',
+        'code_run': os.getenv('CODE_RUN_RATE', '30/min'),
     },
 }
 
+JWT_ACCESS_HOURS = int(os.getenv('JWT_ACCESS_HOURS', 6))
+JWT_REFRESH_DAYS = int(os.getenv('JWT_REFRESH_DAYS', 7))
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv('JWT_ACCESS_MIN', 10))),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_DAYS', 7))),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=JWT_ACCESS_HOURS),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=JWT_REFRESH_DAYS),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
 }
+
+ACCESS_COOKIE_MAX_AGE = int(os.getenv('ACCESS_COOKIE_MAX_AGE', JWT_ACCESS_HOURS * 3600))
+REFRESH_COOKIE_MAX_AGE = int(os.getenv('REFRESH_COOKIE_MAX_AGE', JWT_REFRESH_DAYS * 86400))
 
 
 
@@ -258,6 +265,10 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 GITHUB_CLIENT_ID = os.getenv('GITHUB_CLIENT_ID', '')
 GITHUB_CLIENT_SECRET = os.getenv('GITHUB_CLIENT_SECRET', '')
+
+# External services
+PISTON_API_URL = os.getenv('PISTON_API_URL', 'https://emkc.org/api/v2/piston/execute')
+PISTON_API_KEY = os.getenv('PISTON_API_KEY', '')
 
 # Cookie security tuned for dev vs prod
 if DEBUG:

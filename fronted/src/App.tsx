@@ -6,6 +6,7 @@ import TeacherPanel from './components/teacher/TeacherPanel'
 import TestInterface from './components/student/TestInterface';
 import CodeTrainList from "./components/student/codetrain/CodeTrainList";
 import CodeTrainProblem from "./components/student/codetrain/CodeTrainProblem";
+import CodeBattlePage from "./components/student/codebattle/CodeBattlePage";
 import QuestionsList from "./components/student/QuestionsList";
 import './App.css'
 import Signup from './components/Signup'
@@ -85,6 +86,7 @@ function App() {
           <Route path="test/:testId" element={<TestInterface onLogout={handleLogout} />} />
           <Route path="codetrain" element={<CodeTrainList />} />
           <Route path="codetrain/:id" element={<CodeTrainProblem />} />
+          <Route path="codebattle/:groupId" element={<CodeBattlePage />} />
         </Route>
 
         {/* Teacher Routes */}
