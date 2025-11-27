@@ -279,14 +279,29 @@ def run_code(request):
             status=status.HTTP_502_BAD_GATEWAY,
         )
 
+    # Normalize response with sensible fallbacks (include compile phase)
+    run_block = data.get('run', {}) or {}
+    compile_block = data.get('compile', {}) or {}
+
+    stdout = run_block.get('stdout') or data.get('stdout') or compile_block.get('stdout') or ''
+    stderr = run_block.get('stderr') or data.get('stderr') or compile_block.get('stderr') or ''
+    # Prefer run.output, then API-level output, then run.stdout (some languages), finally compile.stderr for visibility
+    output = run_block.get('output') or data.get('output') or run_block.get('stdout') or compile_block.get('stderr') or ''
+    runtime = run_block.get('time')
+
     normalized = {
-        'stdout': data.get('run', {}).get('stdout') or data.get('stdout', ''),
-        'stderr': data.get('run', {}).get('stderr') or data.get('stderr', ''),
-        'output': data.get('run', {}).get('output') or data.get('output', ''),
-        'signal': data.get('run', {}).get('signal'),
+        'stdout': stdout,
+        'stderr': stderr,
+        'output': output,
+        'signal': run_block.get('signal'),
         'language': language,
         'version': data.get('version', version),
-        'runtime': data.get('run', {}).get('time'),
+        'runtime': runtime,
+        'compile': {
+            'stdout': compile_block.get('stdout') or '',
+            'stderr': compile_block.get('stderr') or '',
+            'code': compile_block.get('code'),
+        }
     }
 
     return Response(normalized, status=status.HTTP_200_OK)

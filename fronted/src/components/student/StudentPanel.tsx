@@ -60,7 +60,7 @@ export default function StudentPanel({ onLogout }: StudentPanelProps) {
               CodeTrain
             </button>
             <button
-              onClick={() => navigate('/student/codebattle/1')}
+              onClick={() => navigate('/student/codebattle')}
               className={`px-4 py-2 rounded-md ${
                 window.location.pathname.startsWith('/student/codebattle')
                   ? 'bg-blue-100 text-blue-700 font-medium'

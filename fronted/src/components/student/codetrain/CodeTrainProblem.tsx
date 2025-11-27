@@ -25,7 +25,7 @@ const CodeTrainProblem: React.FC = () => {
 
   const [problem, setProblem] = useState<Problem | null>(null);
   const [language, setLanguage] = useState<string>("cpp");
-  const [code, setCode] = useState<string>("// C++ starter code\n#include <bits/stdc++.h>\nusing namespace std;\nint main(){\n    \n    return 0;\n}");
+  const [code, setCode] = useState<string>(getStarterCode('cpp'));
   const [stdin, setStdin] = useState<string>("");
   const [output, setOutput] = useState<string>("");
 
@@ -156,6 +156,51 @@ const CodeTrainProblem: React.FC = () => {
     }
   }
 
+  function buildReadableOutput(r: any): string {
+    const lines: string[] = [];
+    const stdout = (r.stdout || '').toString();
+    const output = (r.output || '').toString();
+    const stderr = (r.stderr || '').toString();
+    const cstdout = r.compile?.stdout ? r.compile.stdout.toString() : '';
+    const cstderr = r.compile?.stderr ? r.compile.stderr.toString() : '';
+
+    if (output) {
+      lines.push('Output:', output.trim());
+    } else if (stdout) {
+      lines.push('Stdout:', stdout.trim());
+    }
+    if (stderr) {
+      lines.push('Stderr:', stderr.trim());
+    }
+    if (cstdout) {
+      lines.push('Compile stdout:', cstdout.trim());
+    }
+    if (cstderr) {
+      lines.push('Compile stderr:', cstderr.trim());
+    }
+    if (lines.length === 0) {
+      lines.push('(Bo\'sh javob)');
+    }
+    return lines.join('\n');
+  }
+
+  function getStarterCode(lang: string): string {
+    switch (lang) {
+      case 'cpp':
+        return "// C++ starter code\n#include <bits/stdc++.h>\nusing namespace std;\nint main(){\n    \n    return 0;\n}";
+      case 'python':
+        return "# Python starter code\nprint('')";
+      case 'javascript':
+        return "// JavaScript starter code\nconsole.log('');";
+      case 'java':
+        return "// Java starter code\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println(\"\");\n    }\n}";
+      case 'go':
+        return "// Go starter code\npackage main\nimport \"fmt\"\nfunc main() {\n    fmt.Println(\"\")\n}";
+      default:
+        return "";
+    }
+  }
+
   function mapLanguage(lang: string) {
     switch (lang) {
       case "cpp":
@@ -196,7 +241,9 @@ const CodeTrainProblem: React.FC = () => {
     });
 
     if (!res.ok) throw new Error(await res.text());
-    return await res.json();
+    const data = await res.json();
+    console.log('[Runner] response =', data);
+    return data;
   }
 
   async function onRun() {
@@ -213,18 +260,18 @@ const CodeTrainProblem: React.FC = () => {
         const results: string[] = [];
         for (const t of problem.tests) {
           const r = await executeCode({ code, stdin: t.input });
-          const out = (r.stdout ?? r.output ?? "").trim();
-          const ok = out === t.output.trim();
+          const combined = buildReadableOutput(r);
+          const outOnly = (r.output || r.stdout || '').toString().trim();
+          const ok = outOnly === (t.output || '').toString().trim();
           results.push(
-            `Input: ${t.input}\nExpected: ${t.output}\nOutput: ${out}\nResult: ${
-              ok ? "Passed" : "Failed"
-            }`
+            `Input: ${t.input}\nExpected: ${t.output}\n\n${combined}\nResult: ${ok ? 'Passed' : 'Failed'}`
           );
         }
         setOutput(results.join("\n\n"));
       } else {
         const r = await executeCode({ code, stdin });
-        setOutput((r.stdout ?? r.output ?? "").toString());
+        const combined = buildReadableOutput(r);
+        setOutput(combined);
       }
     } catch (err: any) {
       setOutput("Xatolik: " + err.message);
@@ -342,7 +389,17 @@ const CodeTrainProblem: React.FC = () => {
               <div className="mt-4 flex gap-2 items-center">
                 <select
                   value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
+                  onChange={(e) => {
+                    const newLang = e.target.value;
+                    setLanguage(newLang);
+                    setCode(prev => {
+                      // Agar foydalanuvchi kodni o'zgartirmagan bo'lsa yoki bo'sh bo'lsa, yangi til templatega almashtiramiz
+                      if (prev.trim() === '' || prev === getStarterCode(language)) {
+                        return getStarterCode(newLang);
+                      }
+                      return prev;
+                    });
+                  }}
                   className="px-2 py-2 border rounded"
                 >
                   <option value="cpp">C++</option>
@@ -418,6 +475,7 @@ const CodeTrainProblem: React.FC = () => {
             </div>
 
             {message && <div className="text-sm text-red-600">{message}</div>}
+            <div className="text-xs text-gray-500">Natijalar Piston javobining stdout/output/stderr/compile qismlaridan yig'ildi.</div>
           </div>
         </div>
       ) : (
