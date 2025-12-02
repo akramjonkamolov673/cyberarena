@@ -318,6 +318,14 @@ class ApiService {
     return this.request<TestSubmission[]>(url);
   }
 
+  async getMyTestSubmissions(): Promise<TestSubmission[]> {
+    return this.request<TestSubmission[]>('/api/my-test-submissions/');
+  }
+
+  async getMyCodeSubmissions(): Promise<any[]> {
+    return this.request<any[]>('/api/my-code-submissions/');
+  }
+
   async getTestSubmission(submissionId: number): Promise<TestSubmission> {
     return this.request<TestSubmission>(`/api/test-submissions/${submissionId}/`);
   }

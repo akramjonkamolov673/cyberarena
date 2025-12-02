@@ -150,7 +150,7 @@ class TestSubmission(models.Model):
     def evaluate(self):
         """
         Evaluate answers against TestSet.tests JSON.
-        Expected each test item to include 'correct' index for the correct option.
+        Expected each test item to include 'correct_answer' index for the correct option.
         answers format: [{"question_index": i, "selected": j}, ...]
         Updates correct_count, wrong_count, and score (0-100).
         """
@@ -168,7 +168,7 @@ class TestSubmission(models.Model):
         for i, t in enumerate(tests_def):
             correct_idx = None
             if isinstance(t, dict):
-                correct_idx = t.get('correct')
+                correct_idx = t.get('correct_answer')  # 'correct' o'rniga 'correct_answer'
             if correct_idx is None:
                 # cannot evaluate this question; skip counting
                 total = total - 1 if total > 0 else 0

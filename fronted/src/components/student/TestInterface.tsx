@@ -2,22 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiService, type TestSet } from "../../services/api";
 
-interface UserData {
-  profileImage?: string;
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-  groupName?: string | null;
-}
-
-interface TestInterfaceProps {
-  onLogout: () => void;
-}
-
-export default function TestInterface({ onLogout }: TestInterfaceProps) {
+export default function TestInterface() {
   const navigate = useNavigate();
   const { testId } = useParams<{ testId: string }>();
-  const [userData, setUserData] = useState<UserData | null>(null);
   const [currentTest, setCurrentTest] = useState<TestSet | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,9 +13,6 @@ export default function TestInterface({ onLogout }: TestInterfaceProps) {
   // LOAD TEST DATA
   useEffect(() => {
     const loadTestData = async () => {
-      const data = localStorage.getItem("userData");
-      if (data) setUserData(JSON.parse(data));
-
       if (!testId) {
         console.error('Test ID mavjud emas');
         navigate('/student');
@@ -74,27 +58,42 @@ export default function TestInterface({ onLogout }: TestInterfaceProps) {
     loadTestData();
   }, [testId, navigate]);
 
-  const handleAnswerSelect = (questionIndex: number, optionIndex: number) => {
+  const handleAnswerSelect = (questionIndex: number, optionId: number) => {
     setAnswers(prev => ({
       ...prev,
-      [questionIndex]: optionIndex
+      [questionIndex]: optionId
     }));
   };
 
-  const handleSubmit = () => {
-    // Ballarni hisoblash
-    let score = 0;
-    questions.forEach((question, index) => {
-      if (question.correct_answer === answers[index]) {
-        score++;
-      }
-    });
-    
-    // Natijalarni ko'rsatish
-    alert(`Test yakunlandi! Siz ${score} ta savoldan ${questions.length} tasiga to'g'ri javob berdingiz.`);
-    
-    // Testlar ro'yxatiga qaytish
-    navigate('/student');
+  const handleSubmit = async () => {
+    try {
+      // Javoblarni backendga yuborish uchun formatlash
+      const formattedAnswers = questions.map((question, index) => ({
+        question: question.id,
+        selected: answers[index] || null,
+        question_index: index
+      }));
+      
+      // Backendga yuborish
+      await apiService.submitTestAnswers(parseInt(testId!), formattedAnswers);
+      
+      // Ballarni hisoblash
+      let score = 0;
+      questions.forEach((question, index) => {
+        if (question.correct_answer === answers[index]) {
+          score++;
+        }
+      });
+      
+      // Natijalarni ko'rsatish
+      alert(`Test yakunlandi! Siz ${score} ta savoldan ${questions.length} tasiga to'g'ri javob berdingiz.`);
+      
+      // Testlar ro'yxatiga qaytish
+      navigate('/student');
+    } catch (error) {
+      console.error('Test yuborishda xatolik:', error);
+      alert('Test yuborishda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+    }
   };
 
   if (loading) {
@@ -155,8 +154,8 @@ export default function TestInterface({ onLogout }: TestInterfaceProps) {
                           id={`q${index}-opt${optIndex}`}
                           name={`question-${index}`}
                           className="h-4 w-4 text-blue-600"
-                          checked={answers[index] === optIndex}
-                          onChange={() => handleAnswerSelect(index, optIndex)}
+                          checked={answers[index] === option.id}
+                          onChange={() => handleAnswerSelect(index, option.id)}
                         />
                         <label htmlFor={`q${index}-opt${optIndex}`} className="ml-2 text-gray-700">
                           {String.fromCharCode(65 + optIndex)}. {option.text}

@@ -103,9 +103,39 @@ class CodeSubmissionViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_my_test_submissions(request):
+    """
+    Get current user's test submissions
+    """
+    print(f"Current user: {request.user}")
+    print(f"Current user ID: {request.user.id}")
+    
+    submissions = TestSubmission.objects.filter(user=request.user)
+    print(f"Found submissions: {submissions.count()}")
+    print(f"Submissions data: {list(submissions.values())}")
+    
+    serializer = TestSubmissionSerializer(submissions, many=True)
+    print(f"Serialized data: {serializer.data}")
+    
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_my_code_submissions(request):
+    """
+    Get current user's code submissions
+    """
+    submissions = CodeSubmission.objects.filter(user=request.user)
+    serializer = CodeSubmissionSerializer(submissions, many=True)
+    return Response(serializer.data)
+
+
 class TestSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = TestSubmissionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsTeacher]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -138,9 +168,15 @@ class TestSubmissionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         obj = serializer.save(user=self.request.user)
         try:
-            obj.evaluate().save()
+            print(f"Before evaluation - answers: {obj.answers}")
+            print(f"Test definition: {obj.test.tests}")
+            obj.evaluate()
+            print(f"After evaluation - score: {obj.score}, correct: {obj.correct_count}, wrong: {obj.wrong_count}")
+            obj.save()
         except Exception as e:
             print(f"Error evaluating test submission: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Update is not allowed - users can't modify their submissions
     def update(self, request, *args, **kwargs):

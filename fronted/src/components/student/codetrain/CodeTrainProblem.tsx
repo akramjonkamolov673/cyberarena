@@ -407,17 +407,7 @@ const CodeTrainProblem: React.FC = () => {
               <div className="mt-4 flex gap-2 items-center">
                 <select
                   value={language}
-                  onChange={(e) => {
-                    const newLang = e.target.value;
-                    setLanguage(newLang);
-                    setCode(prev => {
-                      // Agar foydalanuvchi kodni o'zgartirmagan bo'lsa yoki bo'sh bo'lsa, yangi til templatega almashtiramiz
-                      if (prev.trim() === '' || prev === getStarterCode(language)) {
-                        return getStarterCode(newLang);
-                      }
-                      return prev;
-                    });
-                  }}
+                  onChange={(e) => setLanguage(e.target.value as any)}
                   className="px-2 py-2 border rounded"
                 >
                   <option value="cpp">C++</option>
@@ -426,18 +416,20 @@ const CodeTrainProblem: React.FC = () => {
                   <option value="java">Java</option>
                   <option value="go">Go</option>
                 </select>
+              </div>
 
+              <div className="flex flex-col gap-2">
                 <button
                   disabled={running}
                   onClick={onRun}
-                  className="flex-1 px-3 py-2 rounded bg-blue-600 text-white"
+                  className="w-full px-3 py-2 rounded bg-blue-600 text-white"
                 >
                   {running ? "Ishlayapti..." : "Ishga tushirish"}
                 </button>
 
                 <button
                   onClick={submitSolution}
-                  className="px-3 py-2 rounded bg-green-600 text-white"
+                  className="w-full px-3 py-2 rounded bg-green-600 text-white"
                 >
                   Yuborish
                 </button>
@@ -447,7 +439,7 @@ const CodeTrainProblem: React.FC = () => {
                     setCode("");
                     setOutput("");
                   }}
-                  className="px-3 py-2 rounded border"
+                  className="w-full px-3 py-2 rounded border"
                 >
                   Tozalash
                 </button>
@@ -467,13 +459,20 @@ const CodeTrainProblem: React.FC = () => {
             </div>
           </div>
 
-          <div className="md:w-2/3 flex flex-col gap-4">
-            <div className="flex-1 bg-white rounded shadow p-4">
+          <div className="md:w-3/4 flex flex-col gap-4">
+            <div className="flex-1 bg-gray-900 rounded shadow p-4 min-h-[600px]">
               <textarea
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="w-full h-full font-mono text-sm p-2 border rounded"
+                className="w-full h-[600px] font-mono text-sm p-4 bg-gray-900 text-gray-100 border border-gray-700 rounded resize-none focus:outline-none focus:border-blue-500"
                 spellCheck="false"
+                style={{ 
+                  minHeight: "600px",
+                  fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                  fontSize: '14px',
+                  lineHeight: '1.5'
+                }}
+                placeholder="// Kodni bu yerga yozing..."
               />
             </div>
 

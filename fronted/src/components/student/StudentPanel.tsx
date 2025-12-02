@@ -49,6 +49,16 @@ export default function StudentPanel({ onLogout }: StudentPanelProps) {
             >
               Savollar
             </button>
+            <button
+              onClick={() => navigate('/student/results')}
+              className={`px-4 py-2 rounded-md ${
+                window.location.pathname.startsWith('/student/results')
+                  ? 'bg-blue-100 text-blue-700 font-medium'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              Natijalar
+            </button>
             {/* <button
               onClick={() => navigate('/student/codetrain')}
               className={`px-4 py-2 rounded-md ${
