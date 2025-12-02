@@ -26,7 +26,6 @@ const CodeTrainProblem: React.FC = () => {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [language, setLanguage] = useState<string>("cpp");
   const [code, setCode] = useState<string>(getStarterCode('cpp'));
-  const [stdin, setStdin] = useState<string>("");
   const [output, setOutput] = useState<string>("");
 
   const [runCount, setRunCount] = useState<number>(0);
@@ -226,6 +225,18 @@ const CodeTrainProblem: React.FC = () => {
       throw new Error('Auth required');
     }
 
+    // Kod bo'sh emasligini tekshirish
+    if (!code || code.trim() === '') {
+      throw new Error('Iltimos, avval kod kiriting!');
+    }
+
+    // Vergullarni bo'shliqqa almashtirish (C++ uchun)
+    const cleanStdin = stdin.replace(/,/g, ' ');
+    const mappedLanguage = mapLanguage(language);
+    console.log('Original stdin:', stdin);
+    console.log('Clean stdin:', cleanStdin);
+    console.log('Yuborilayotgan ma\'lumot:', { language: mappedLanguage, source: code, stdin: cleanStdin });
+
     const res = await fetch(`${API_BASE_URL}/api/runner/`, {
       method: "POST",
       credentials: "include",
@@ -234,15 +245,22 @@ const CodeTrainProblem: React.FC = () => {
         "Authorization": `Bearer ${token}`
       },
       body: JSON.stringify({
-        language: mapLanguage(language),
+        language: mappedLanguage,
         source: code,
-        stdin: stdin,
+        stdin: cleanStdin,
       }),
     });
 
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Backend xatolik:', res.status, errorText);
+      throw new Error(`Backend xatolik: ${res.status} - ${errorText}`);
+    }
+    
     const data = await res.json();
-    console.log('[Runner] response =', data);
+    console.log('[Runner] backend response =', data);
+    console.log('[Runner] output field =', data.output);
+    console.log('[Runner] stdout field =', data.stdout);
     return data;
   }
 
@@ -269,7 +287,7 @@ const CodeTrainProblem: React.FC = () => {
         }
         setOutput(results.join("\n\n"));
       } else {
-        const r = await executeCode({ code, stdin });
+        const r = await executeCode({ code, stdin: "" });
         const combined = buildReadableOutput(r);
         setOutput(combined);
       }
@@ -427,7 +445,6 @@ const CodeTrainProblem: React.FC = () => {
                 <button
                   onClick={() => {
                     setCode("");
-                    setStdin("");
                     setOutput("");
                   }}
                   className="px-3 py-2 rounded border"
@@ -461,17 +478,11 @@ const CodeTrainProblem: React.FC = () => {
             </div>
 
             <div className="bg-white rounded shadow p-4">
-              <h3 className="font-medium mb-2">Input:</h3>
-              <textarea
-                value={stdin}
-                onChange={(e) => setStdin(e.target.value)}
-                className="w-full h-20 font-mono text-sm p-2 border rounded"
-              />
-            </div>
-
-            <div className="bg-white rounded shadow p-4">
-              <h3 className="font-medium mb-2">Output:</h3>
-              <TerminalOutput output={output} />
+              <h3 className="font-medium mb-2">Terminal:</h3>
+              <div>
+                <label className="text-sm text-gray-600">Output:</label>
+                <TerminalOutput output={output} />
+              </div>
             </div>
 
             {message && <div className="text-sm text-red-600">{message}</div>}

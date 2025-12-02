@@ -49,7 +49,7 @@ export default function StudentPanel({ onLogout }: StudentPanelProps) {
             >
               Savollar
             </button>
-            <button
+            {/* <button
               onClick={() => navigate('/student/codetrain')}
               className={`px-4 py-2 rounded-md ${
                 window.location.pathname.startsWith('/student/codetrain')
@@ -58,7 +58,7 @@ export default function StudentPanel({ onLogout }: StudentPanelProps) {
               }`}
             >
               CodeTrain
-            </button>
+            </button> */}
             <button
               onClick={() => navigate('/student/codebattle')}
               className={`px-4 py-2 rounded-md ${
